@@ -71,12 +71,12 @@ class FaceDetector:
             min_detection_confidence=0.5,
             min_tracking_confidence=0.5
             ) as face_mesh:
-                h, w = img.shape[:2]
+                self.h, self.w = img.shape[:2]
                 self.results = face_mesh.process(img)
                 if self.results.multi_face_landmarks:
                     mesh_points = np.array(
                         [
-                            np.multiply([p.x, p.y], [w, h]).astype(int) for p in self.results.multi_face_landmarks[0].landmark
+                            np.multiply([p.x, p.y], [self.w, self.h]).astype(int) for p in self.results.multi_face_landmarks[0].landmark
                         ]
                     )
                     return mesh_points
@@ -89,7 +89,6 @@ class FaceDetector:
         mp_pose = mp.solutions.pose
         mp_drawing_styles = mp.solutions.drawing_styles
         mp_drawing = mp.solutions.drawing_utils
-        self.w, self.h = img.shape[:2]
         with mp_pose.Pose(
             min_tracking_confidence=0.5,
             min_detection_confidence=0.5) as pose:
@@ -102,13 +101,25 @@ class FaceDetector:
                 mp_pose.POSE_CONNECTIONS,
                 landmark_drawing_spec=mp_drawing_styles.get_default_pose_landmarks_style())
             if self.results.pose_world_landmarks:
-                head_pts = [
+                head_pts = []
+                for idx, pt in enumerate(self.results.pose_landmarks.landmark):
+                    center = np.array(
+                        np.multiply([pt.x, pt.y], [self.w, self.h]).astype(int)
+                    )
+                    if idx in [7,8]:
+                        head_pts.append(center)
+                        cv2.circle(img, center, 2, (255,0,255), 2, cv2.LINE_AA)
+                        message = f"{idx}"
+                        cv2.putText(img, message, (center[0], center[1]-20), cv2.FONT_HERSHEY_SIMPLEX, .5, (0,255,0), 1, cv2.LINE_AA)
+                # maybe use real 3D positions later. All points relative to center of hip joint
+                body_pts = [
                     {
-                        'x': p.x,
-                        'y': p.y,
+                        'x': int(p.x * self.w),
+                        'y': int(p.y * self.h),
                         'z': p.z,
                         'visibility':p.visibility
                     } for p in self.results.pose_world_landmarks.landmark]
+
                 
         return img, head_pts
 
@@ -266,6 +277,11 @@ def main():
                     message = 'Face not detected. Using body pose estimates.'
                     cv2.putText(img, message, (70, 100), cv2.FONT_HERSHEY_SIMPLEX, 1, (255,0,0), 2, cv2.LINE_AA)
                     img, head_pts = detector.findBody(img)
+                    s2c_d3 = s2c_dist(f, median(head_measurements), np.linalg.norm(head_pts[0] - head_pts[1]))
+                    s2c_d3 /= 10
+                    s2c_d3 = cm_to_ft(s2c_d3)
+                    message2 = f'S2C dist (ft): {s2c_d3}'
+                    cv2.putText(img, message2, (50, 150), cv2.FONT_HERSHEY_SIMPLEX, 1, (0,255,0), 2, cv2.LINE_AA)
                     # head_pts = head_pts[[7,8]]
                     # print(head_pts)
                     writer.write(img)
