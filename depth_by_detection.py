@@ -1,5 +1,5 @@
 """
-Face Detection Module
+Face & Body Detection Module
 """
 
 import cv2
@@ -237,6 +237,7 @@ def main():
                 writer.write(img)
                 # if cnt > 149:
                 #     break
+            # if no face mesh, try face detection
             else:
                 message = 'Landmarks not detected. Using face boundaries.'
                 cv2.putText(img, message, (70, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (255,0,0), 2, cv2.LINE_AA)
@@ -260,16 +261,18 @@ def main():
                         for idx, m in enumerate(messages):
                             cv2.putText(img, m, (50, 100 + idx*50), cv2.FONT_HERSHEY_SIMPLEX, 1, (0,255,0), 2, cv2.LINE_AA)
                     writer.write(img)
-                # try body pose estimator
+                # if no face bboxes, try body pose estimator
                 else:
+                    message = 'Face not detected. Using body pose estimates.'
+                    cv2.putText(img, message, (70, 100), cv2.FONT_HERSHEY_SIMPLEX, 1, (255,0,0), 2, cv2.LINE_AA)
                     img, head_pts = detector.findBody(img)
                     # head_pts = head_pts[[7,8]]
-                    print(head_pts)
+                    # print(head_pts)
                     writer.write(img)
 
-            # cv2.imshow('Output', img)
-            if cv2.waitKey(1) & 0xff == ord('q'):
-                break             
+                # cv2.imshow('Output', img)
+                if cv2.waitKey(1) & 0xff == ord('q'):
+                    break             
         else:
             print('No access to video feed. Exiting...')
             break
