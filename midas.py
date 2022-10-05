@@ -44,10 +44,6 @@ class VidStream(object):
         # FPS = 1/X, X = desired FPS
         self.FPS = 1/30
         self.FPS_MS = int(self.FPS * 1000)
-        # Start frame retrieval thread
-        self.thread = Thread(target=self.update, args=())
-        self.thread.daemon = True
-        self.thread.start()
         self.w = int(self.video.get(3))
         self.h = int(self.video.get(4))
         self.fourcc = cv2.VideoWriter_fourcc(*'MJPG')
