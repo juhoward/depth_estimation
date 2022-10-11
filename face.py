@@ -83,13 +83,13 @@ class FaceDet(object):
             # if face detected, use iris location depth
             l_ctr = list(map(lambda x: int(x), self.l_iris['center']))
             r_ctr = list(map(lambda x: int(x), self.r_iris['center']))
-            for idx, i,j in enumerate(zip(l_ctr, r_ctr)):
+            for idx, (i,j) in enumerate(zip(l_ctr, r_ctr)):
                 if idx == 0:
-                    l_ctr[idx] = min(self.w, l_ctr[idx])
-                    r_ctr[idx] = min(self.w, r_ctr[idx])
+                    l_ctr[idx] = min(img.shape[0]-1, i)
+                    r_ctr[idx] = min(img.shape[0]-1, j)
                 else:
-                    l_ctr[idx] = min(self.h, l_ctr[idx])
-                    l_ctr[idx] = min(self.h, l_ctr[idx])                  
+                    l_ctr[idx] = min(img.shape[1]-1, i)
+                    l_ctr[idx] = min(img.shape[1]-1, j)                  
             print(
                 f'left: {l_ctr}, right:{r_ctr}, img shape: {img.shape}'
             )

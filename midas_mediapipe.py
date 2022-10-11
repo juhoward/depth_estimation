@@ -23,7 +23,7 @@ class VidStream(object):
         self.w = int(self.video.get(3))
         self.h = int(self.video.get(4))
         self.fourcc = cv2.VideoWriter_fourcc(*'MJPG')
-        self.writer = cv2.VideoWriter(str(output), self.fourcc, 20, (self.w, self.h))
+        self.writer = cv2.VideoWriter(str(output), self.fourcc, 20, (self.w, self.h // 2))
         self.status = False
         self.cnt = 0
 
