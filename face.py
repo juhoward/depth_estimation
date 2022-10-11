@@ -131,7 +131,7 @@ class FaceDet(object):
         a simple linear transformation.
         division by 2.54 to convert to inches, then divide by 2.
         '''
-        return pred_depth / (2.54 * 2)
+        return pred_depth / 2.54
 
     def mm2cm(self, dist):
         return dist/10
