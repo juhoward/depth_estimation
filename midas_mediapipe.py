@@ -74,13 +74,11 @@ class VidStream(object):
                         ######################################
                         depth_frame = self.to_video_frame(depth_frame)
                         # write output to depth image
-                        self.face.rel2abs(self.face.ri_depths, self.face.s2c_ds)
+                        self.face.rel2abs()
                         message = f'Relative Inverse Depth: {round(self.face.ri_depth, 2)}'
                         message2 = f'Absolute Depth: {round(self.face.abs_depth, 2)}'
-                        depth2 = self.face.rel2abs_2(self.face.ri_depth)
-                        message3 = f'Simple Abs depth: {round(depth2, 2)}'
-                        message4 = f'RMSE (simple abs vs s2c dist): {self.face.rmse()}'
-                        messages = [message, message2, message3, message4]
+                        message3 = f'RMSE (simple abs vs s2c dist): {self.face.rmse()}'
+                        messages = [message, message2, message3]
                         self.write_messages(messages, depth_frame)
                         self.write_output(depth_frame)
                     else:
@@ -93,13 +91,11 @@ class VidStream(object):
                         cv2.putText(self.frame, message2, (50, 150), cv2.FONT_HERSHEY_SIMPLEX, 1, (0,255,0), 2, cv2.LINE_AA)
                         depth_frame = self.to_video_frame(depth_frame)
                         # write output to depth image
-                        self.face.rel2abs(self.face.ri_depths, self.face.s2c_ds)
+                        self.face.rel2abs()
                         message = f'Relative Inverse Depth: {round(self.face.ri_depth, 2)}'
                         message2 = f'Absolute Depth: {round(self.face.abs_depth, 2)}'
-                        depth2 = self.face.rel2abs_2(self.face.ri_depth)
-                        message3 = f'Simple Abs depth: {round(depth2, 2)}'
-                        message4 = f'RMSE (abs vs s2c dist): {self.face.rmse()}'
-                        messages = [message, message2, message3, message4]
+                        message3 = f'RMSE (abs vs s2c dist): {self.face.rmse()}'
+                        messages = [message, message2, message3]
                         self.write_messages(messages, depth_frame)
                         self.write_output(depth_frame)
                 else:
