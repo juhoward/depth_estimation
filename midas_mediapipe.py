@@ -79,7 +79,8 @@ class VidStream(object):
                         message2 = f'Absolute Depth: {round(self.face.abs_depth, 2)}'
                         depth2 = self.face.rel2abs_2(self.face.ri_depth)
                         message3 = f'Simple Abs depth: {round(depth2, 2)}'
-                        messages = [message, message2, message3]
+                        message4 = f'RMSE (simple abs vs s2c dist): {self.face.rmse()}'
+                        messages = [message, message2, message3, message4]
                         self.write_messages(messages, depth_frame)
                         self.write_output(depth_frame)
                     else:
@@ -97,7 +98,8 @@ class VidStream(object):
                         message2 = f'Absolute Depth: {round(self.face.abs_depth, 2)}'
                         depth2 = self.face.rel2abs_2(self.face.ri_depth)
                         message3 = f'Simple Abs depth: {round(depth2, 2)}'
-                        messages = [message, message2, message3]
+                        message4 = f'RMSE (abs vs s2c dist): {self.face.rmse()}'
+                        messages = [message, message2, message3, message4]
                         self.write_messages(messages, depth_frame)
                         self.write_output(depth_frame)
                 else:
@@ -110,7 +112,6 @@ class VidStream(object):
         cv2.destroyAllWindows()
 
     def write_messages(self, messages, img):
-        messages = [str(i) for i in messages]
         for idx, m in enumerate(messages):
             cv2.putText(img, m, (50, 50 + idx*50), 
                 cv2.FONT_HERSHEY_SIMPLEX, 1, (0,255,0), 2, cv2.LINE_AA)

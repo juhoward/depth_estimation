@@ -36,14 +36,16 @@ class FaceDet(object):
         self.head_measurements = []
         # subject-to-camera distance
         self.s2c_d = 0
-        # s2c logging
         self.s2c_ds = []
         # average relative inverse depth (iris, head)
         self.ri_depth = 0
-        # depth logging
         self.ri_depths = []
         # converted absolute depth
         self.abs_depth = 0
+        self.abs_depths = []
+        #  errors
+        self.error = 0
+        self.errors = []
 
 
     def f_length(self):
@@ -113,7 +115,7 @@ class FaceDet(object):
             self.ri_depth = ri_depth
             self.ri_depths.append(ri_depth)
 
-    def rel2abs(self, pred_depths, gt_depths):
+    def rel2abs_2(self, pred_depths, gt_depths):
         '''
         given dataset of relative inverse depths and gt_depths (cm),
         finds a linear relationship in form pred = mx + b
@@ -124,14 +126,24 @@ class FaceDet(object):
         # align prediction based on least squares estimates
         A = np.vstack([gt, np.ones(len(gt))]).T
         self.m, self.b = np.linalg.lstsq(A, pred_depths, rcond=None)[0]
-        self.abs_depth = self.ri_depth * self.m + self.b
+        # transform to ft
+        self.abs_depth = self.cm_to_ft(self.ri_depth * self.m + self.b)
     
-    def rel2abs_2(self, pred_depth):
+    def rel2abs(self):
         '''
         a simple linear transformation.
-        division by 2.54 to convert to inches, then divide by 2.
+        division by 2.54 to convert to inches.
         '''
-        return pred_depth / 2.54
+        abs_depth = self.ri_depth / 2.54
+        self.abs_depth = abs_depth
+        self.abs_depths.append(abs_depth)
+    
+    def rmse(self):
+        '''
+        returns rmse of converted abs depths and s2c distsances.
+        '''
+        errors = list(map(lambda x: (x[0] - x[1])**2, zip(self.abs_depths, self.s2c_ds)))
+        return sqrt((sum(errors)/ len(errors)))
 
     def mm2cm(self, dist):
         return dist/10
