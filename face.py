@@ -32,10 +32,13 @@ class FaceDet(object):
         self.head_pts = None
         # head width (mm) based on iris diameter (mm)
         self.head_w = 0
+        # head pixel width
+        self.head_pixw = 0
         # holds head measurements
         self.head_measurements = []
-        # subject-to-camera distance
+        # subject-to-camera distance (in)
         self.s2c_d = 0
+        # s2c (cm)
         self.s2c_ds = []
         # average relative inverse depth (iris, head)
         self.ri_depth = 0
@@ -75,7 +78,8 @@ class FaceDet(object):
         # keep state for reporting
         self.s2c_d = s2c_d
 
-    def get_headw(self, p1, p2):
+
+    def get_headw(self, p1, p2, logging=True):
         '''
         takes cheek points from facemesh &
         returns the width (mm) of the head based on the iris detection.
@@ -83,10 +87,11 @@ class FaceDet(object):
         '''
         self.head_pts = (p1, p2)
         # head width in pixels
-        head_pixw = dist((p1[0], p1[1]), (p2[0], p2[1]))
+        self.head_pixw = dist((p1[0], p1[1]), (p2[0], p2[1]))
         # horizontal distance in mm/pixel units : iris plane
-        self.head_w = (head_pixw * self.w_iris) / (self.l_iris['radius'] * 2)
-        self.head_measurements.append(self.head_w)
+        self.head_w = (self.head_pixw * self.w_iris) / (self.l_iris['radius'] * 2)
+        if logging:
+            self.head_measurements.append(self.head_w)
     
     def get_depth(self, img):
         '''
@@ -142,16 +147,16 @@ class FaceDet(object):
         '''
         returns rmse of converted abs depths and s2c distsances.
         '''
-        errors = list(map(lambda x: (x[0] - x[1])**2, zip(self.s2c_ds, self.abs_depths)))
+        errors = list(map(lambda x: (self.cm_to_ft(x[0]) - x[1])**2, zip(self.s2c_ds, self.abs_depths)))
         return sqrt((sum(errors)/ len(errors)))
 
     def mae(self):
         '''
-        reutrns mean absolute error of converted abs depth and s2c distances
+        returns mean absolute error of converted abs depth and s2c distances
         '''
-        errors = list(map(lambda x: abs(x[0] - x[1]), zip(self.s2c_ds, self.abs_depths)))
+        errors = list(map(lambda x: abs(self.cm_to_ft(x[0]) - x[1]), zip(self.s2c_ds, self.abs_depths)))
         return sum(errors) / len(errors)
-        
+
     def mm2cm(self, dist):
         return dist/10
 

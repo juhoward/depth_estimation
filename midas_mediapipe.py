@@ -38,11 +38,11 @@ class VidStream(object):
                 self.status, self.frame = self.video.read()
                 self.cnt += 1
                 print(f'Frame: {self.cnt}')
-                # if self.cnt >= 230:
-                #     self.video.release()
-                #     self.writer.release()
-                #     cv2.destroyAllWindows()
-                #     break
+                if self.cnt >= 230:
+                    self.video.release()
+                    self.writer.release()
+                    cv2.destroyAllWindows()
+                    break
                 if self.status == True:
                     if cv2.waitKey(1) & 0xff == ord('q'):
                         self.video.release()
@@ -74,10 +74,10 @@ class VidStream(object):
                         self.face.get_headw((x1, y1), (x2, y2))
                         ######################################
                         # write output to rgb frame
-                        message = f"S2C Distance (ft) - iris: {str(self.face.s2c_d)}"
+                        message = f"S2C Distance (ft) - iris: {self.face.s2c_d}"
                         # message2 = f"S2C Distance (ft) - head: {str(s2c_d2)}"
-                        message3 = f'Head width (in): {str(round((self.face.head_w/10) / 2.54, 2))}'
-                        message4 = f'head_w_mm: {str(self.face.head_w)}'
+                        message3 = f'Head width (in): {round((self.face.head_w/10) / 2.54, 2)}'
+                        message4 = f'head_w_mm: {round(self.face.head_w, 2)}'
                         message5 = f'focal length: {round(self.face.f, 2)}'
                         # message6 = f'mm / pixel - iris plane: {pix_dist}'
                         messages = [message, message3, message4, message5]
@@ -85,31 +85,36 @@ class VidStream(object):
                         ######################################
                         depth_frame = self.to_video_frame(depth_frame)
                         # write output to depth image
-                        message = f'Relative Inverse Depth: {round(self.face.ri_depth, 2)}'
-                        message2 = f'Absolute Depth: {round(self.face.abs_depth, 2)}'
+                        message = f'S2C Distance (ft): {round(self.face.abs_depth, 2)}'
+                        message2 = f'Relative Inverse Depth: {round(self.face.ri_depth, 2)}'
                         message3 = f'RMSE: {round(self.face.rmse(), 2)}'
                         message4 = f'MAE: {round(self.face.mae(), 2)}'
                         messages = [message, message2, message3,  message4]
                         self.write_messages(messages, depth_frame)
                         self.write_output(depth_frame)
                     else:
-                        # update depth from head location
-                        self.face.rel2abs()
-                        # write output to rgb frame
-                        message = 'Face not detected. Using body pose estimates.'
-                        cv2.putText(self.frame, message, (70, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (255,0,0), 2, cv2.LINE_AA)
                         self.start = process_time()
                         self.frame, head_pts = self.detector.findBody(self.frame)
                         self.end = process_time() 
                         self.performance['body'].append(self.end - self.start)
-                        self.face.get_headw(head_pts[0], head_pts[1])
-                        self.face.s2c_dist(median(self.face.head_measurements), self.face.head_w)
+                        # update depth from head location
+                        self.face.rel2abs()
+                        # don't log head width
+                        self.face.get_headw(head_pts[0], head_pts[1], logging=False)
+                        print(f'median head width: {median(self.face.head_measurements)}')
+                        self.face.s2c_dist(median(self.face.head_measurements), self.face.head_pixw)
+                        # write output to rgb frame
+                        message = 'Face not detected. Using body pose estimates.'
+                        cv2.putText(self.frame, message, (70, 550), cv2.FONT_HERSHEY_SIMPLEX, 1, (255,0,0), 2, cv2.LINE_AA)
                         message2 = f'S2C dist (ft): {self.face.s2c_d}'
-                        cv2.putText(self.frame, message2, (50, 150), cv2.FONT_HERSHEY_SIMPLEX, 1, (0,255,0), 2, cv2.LINE_AA)
+                        message3 = f'focal length: {round(self.face.f, 2)}'
+                        # message6 = f'mm / pixel - iris plane: {pix_dist}'
+                        messages = [message2, message3]
+                        self.write_messages(messages, self.frame)
                         depth_frame = self.to_video_frame(depth_frame)
                         # write output to depth image
-                        message = f'Relative Inverse Depth: {round(self.face.ri_depth, 2)}'
-                        message2 = f'Absolute Depth: {round(self.face.abs_depth, 2)}'
+                        message = f'S2C Distance (ft): {round(self.face.abs_depth, 2)}'
+                        message2 = f'Relative Inverse Depth: {round(self.face.ri_depth, 2)}'
                         message3 = f'RMSE: {round(self.face.rmse(), 2)}'
                         message4 = f'MAE: {round(self.face.mae(), 2)}'
                         messages = [message, message2, message3,  message4]
