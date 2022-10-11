@@ -77,8 +77,9 @@ class VidStream(object):
                         self.face.rel2abs()
                         message = f'Relative Inverse Depth: {round(self.face.ri_depth, 2)}'
                         message2 = f'Absolute Depth: {round(self.face.abs_depth, 2)}'
-                        message3 = f'RMSE (simple abs vs s2c dist): {self.face.rmse()}'
-                        messages = [message, message2, message3]
+                        message3 = f'RMSE: {self.face.rmse()}'
+                        message4 = f'MAE: {self.face.mae()}'
+                        messages = [message, message2, message3,  message4]
                         self.write_messages(messages, depth_frame)
                         self.write_output(depth_frame)
                     else:
@@ -95,7 +96,8 @@ class VidStream(object):
                         message = f'Relative Inverse Depth: {round(self.face.ri_depth, 2)}'
                         message2 = f'Absolute Depth: {round(self.face.abs_depth, 2)}'
                         message3 = f'RMSE (abs vs s2c dist): {self.face.rmse()}'
-                        messages = [message, message2, message3]
+                        message4 = f'MAE: {self.face.mae()}'
+                        messages = [message, message2, message3,  message4]
                         self.write_messages(messages, depth_frame)
                         self.write_output(depth_frame)
                 else:

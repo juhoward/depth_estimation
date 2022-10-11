@@ -142,9 +142,16 @@ class FaceDet(object):
         '''
         returns rmse of converted abs depths and s2c distsances.
         '''
-        errors = list(map(lambda x: (x[0] - x[1])**2, zip(self.abs_depths, self.s2c_ds)))
+        errors = list(map(lambda x: (x[0] - x[1])**2, zip(self.s2c_ds, self.abs_depths)))
         return sqrt((sum(errors)/ len(errors)))
 
+    def mae(self):
+        '''
+        reutrns mean absolute error of converted abs depth and s2c distances
+        '''
+        errors = list(map(lambda x: abs(x[0] - x[1]), zip(self.s2c_ds, self.abs_depths)))
+        return sum(errors) / len(errors)
+        
     def mm2cm(self, dist):
         return dist/10
 
