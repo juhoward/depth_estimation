@@ -74,10 +74,13 @@ class VidStream(object):
                         ######################################
                         depth_frame = self.to_video_frame(depth_frame)
                         # write output to depth image
-                        message = f'Relative Inverse Depth: {round(self.face.av_depth, 2)}'
+                        self.face.rel2abs(self.face.ri_depths, self.face.s2c_ds)
+                        message = f'Relative Inverse Depth: {round(self.face.ri_depth, 2)}'
                         message2 = f'Absolute Depth: {round(self.face.abs_depth, 2)}'
-                        messages = [message, message2]
-                        self.write_messages([messages], depth_frame)
+                        depth2 = self.face.rel2abs_2(self.face.ri_depth)
+                        message3 = f'Simple Abs depth: {round(depth2, 2)}'
+                        messages = [message, message2, message3]
+                        self.write_messages(messages, depth_frame)
                         self.write_output(depth_frame)
                     else:
                         message = 'Face not detected. Using body pose estimates.'
@@ -89,11 +92,13 @@ class VidStream(object):
                         cv2.putText(self.frame, message2, (50, 150), cv2.FONT_HERSHEY_SIMPLEX, 1, (0,255,0), 2, cv2.LINE_AA)
                         depth_frame = self.to_video_frame(depth_frame)
                         # write output to depth image
-                        self.face.rel2abs(self.face.rel2abs(self.face.av_depths, self.face.s2c_ds))
-                        message = f'Relative Inverse Depth: {round(self.face.av_depth, 2)}'
+                        self.face.rel2abs(self.face.ri_depths, self.face.s2c_ds)
+                        message = f'Relative Inverse Depth: {round(self.face.ri_depth, 2)}'
                         message2 = f'Absolute Depth: {round(self.face.abs_depth, 2)}'
-                        messages = [message, message2]
-                        self.write_messages([messages], depth_frame)
+                        depth2 = self.face.rel2abs_2(self.face.ri_depth)
+                        message3 = f'Simple Abs depth: {round(depth2, 2)}'
+                        messages = [message, message2, message3]
+                        self.write_messages(messages, depth_frame)
                         self.write_output(depth_frame)
                 else:
                     break
@@ -103,11 +108,13 @@ class VidStream(object):
         self.video.release()
         self.writer.release()
         cv2.destroyAllWindows()
+
     def write_messages(self, messages, img):
-        messages = list(map(lambda x: str(x), messages))
+        messages = [str(i) for i in messages]
         for idx, m in enumerate(messages):
             cv2.putText(img, m, (50, 50 + idx*50), 
                 cv2.FONT_HERSHEY_SIMPLEX, 1, (0,255,0), 2, cv2.LINE_AA)
+
     def detect_points(self, img):
         detector.findIris(img)
         if not self.face.mesh:

@@ -38,10 +38,10 @@ class FaceDet(object):
         self.s2c_d = 0
         # s2c logging
         self.s2c_ds = []
-        # estimated average relative inverse depth (iris, head)
-        self.av_depth = 0
-        # avg relative inverse depth logging
-        self.av_depths = []
+        # average relative inverse depth (iris, head)
+        self.ri_depth = 0
+        # depth logging
+        self.ri_depths = []
         # converted absolute depth
         self.abs_depth = 0
 
@@ -103,15 +103,15 @@ class FaceDet(object):
                     l_ctr[idx] = min(img.shape[1]-1, j)                  
             left = img[l_ctr[0],l_ctr[1]]
             right = img[r_ctr[0], r_ctr[1]]
-            av_depth = (left + right) / 2
-            self.av_depth = av_depth
-            self.av_depths.append(av_depth)
+            ri_depth = (left + right) / 2
+            self.ri_depth = ri_depth
+            self.ri_depths.append(ri_depth)
         else:
             d_left = img[self.head_pts[0][0], self.head_pts[0][1]]
             d_right = img[self.head_pts[1][0], self.head_pts[1][1]]
-            av_depth = (d_left + d_right) / 2
-            self.av_depth = av_depth
-            self.av_depths.append(av_depth)
+            ri_depth = (d_left + d_right) / 2
+            self.ri_depth = ri_depth
+            self.ri_depths.append(ri_depth)
 
     def rel2abs(self, pred_depths, gt_depths):
         '''
@@ -120,11 +120,18 @@ class FaceDet(object):
         returns absolute depth (cm).
         '''
         # invert gt
-        gt = 1/gt_depths
+        gt = list(map(lambda x: 1/x, gt_depths))
         # align prediction based on least squares estimates
         A = np.vstack([gt, np.ones(len(gt))]).T
-        self.m, self.b = np.linalg.lstsq(A, pred_depths)[0]
-        self.abs_depth = self.av_depth * self.m + self.b
+        self.m, self.b = np.linalg.lstsq(A, pred_depths, rcond=None)[0]
+        self.abs_depth = self.ri_depth * self.m + self.b
+    
+    def rel2abs_2(self, pred_depth):
+        '''
+        a simple linear transformation.
+        division by 2.54 to convert to inches, then divide by 2.
+        '''
+        return pred_depth / (2.54 * 2)
 
     def mm2cm(self, dist):
         return dist/10
