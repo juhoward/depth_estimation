@@ -1,5 +1,5 @@
 from math import sqrt, dist
-
+import numpy as np
 
 class FaceDet(object):
     '''
@@ -36,8 +36,15 @@ class FaceDet(object):
         self.head_measurements = []
         # subject-to-camera distance
         self.s2c_d = 0
-        # average depth
+        # s2c logging
+        self.s2c_ds = []
+        # estimated average relative inverse depth (iris, head)
         self.av_depth = 0
+        # avg relative inverse depth logging
+        self.av_depths = []
+        # converted absolute depth
+        self.abs_depth = 0
+
 
     def f_length(self):
         ''' 
@@ -59,9 +66,13 @@ class FaceDet(object):
         s2c_d = (self.f * w_object) / w_pix
         # transform mm to cm
         s2c_d /= 10
+        # log metric distance (cm) for parameter estimation
+        self.s2c_ds.append(s2c_d)
         # return distance in ft
-        self.s2c_d = self.cm_to_ft(s2c_d)
-    
+        s2c_d = self.cm_to_ft(s2c_d)
+        # keep state for reporting
+        self.s2c_d = s2c_d
+
     def get_headw(self, p1, p2):
         '''
         takes cheek points from facemesh &
@@ -77,7 +88,7 @@ class FaceDet(object):
     
     def get_depth(self, img):
         '''
-        returns the average of both 2 depth pixels.
+        returns the average relative inverse depth of 2 depth pixels.
         '''
         if self.mesh is not None:
             # if face detected, use iris location depth
@@ -90,16 +101,30 @@ class FaceDet(object):
                 else:
                     l_ctr[idx] = min(img.shape[1]-1, i)
                     l_ctr[idx] = min(img.shape[1]-1, j)                  
-            print(
-                f'left: {l_ctr}, right:{r_ctr}, img shape: {img.shape}'
-            )
             left = img[l_ctr[0],l_ctr[1]]
             right = img[r_ctr[0], r_ctr[1]]
-            self.av_depth = (left + right) / 2
+            av_depth = (left + right) / 2
+            self.av_depth = av_depth
+            self.av_depths.append(av_depth)
         else:
             d_left = img[self.head_pts[0][0], self.head_pts[0][1]]
             d_right = img[self.head_pts[1][0], self.head_pts[1][1]]
-            self.av_depth = (d_left + d_right) / 2
+            av_depth = (d_left + d_right) / 2
+            self.av_depth = av_depth
+            self.av_depths.append(av_depth)
+
+    def rel2abs(self, pred_depths, gt_depths):
+        '''
+        given dataset of relative inverse depths and gt_depths (cm),
+        finds a linear relationship in form pred = mx + b
+        returns absolute depth (cm).
+        '''
+        # invert gt
+        gt = 1/gt_depths
+        # align prediction based on least squares estimates
+        A = np.vstack([gt, np.ones(len(gt))]).T
+        self.m, self.b = np.linalg.lstsq(A, pred_depths)[0]
+        self.abs_depth = self.av_depth * self.m + self.b
 
     def mm2cm(self, dist):
         return dist/10
