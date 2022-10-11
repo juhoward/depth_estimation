@@ -104,6 +104,10 @@ class VidStream(object):
         transforms midas depth frame to a video frame.
         '''
         output = img.astype(np.uint8)
+        # change contrast
+        output *= 5
+        # brightness
+        output += 10
         return cv2.merge([output,output,output])
 
     def side_by_side(self, img1, img2):
