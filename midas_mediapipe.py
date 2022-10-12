@@ -38,11 +38,11 @@ class VidStream(object):
                 self.status, self.frame = self.video.read()
                 self.cnt += 1
                 print(f'Frame: {self.cnt}')
-                if self.cnt >= 230:
-                    self.video.release()
-                    self.writer.release()
-                    cv2.destroyAllWindows()
-                    break
+                # if self.cnt >= 230:
+                #     self.video.release()
+                #     self.writer.release()
+                #     cv2.destroyAllWindows()
+                #     break
                 if self.status == True:
                     if cv2.waitKey(1) & 0xff == ord('q'):
                         self.video.release()
