@@ -38,6 +38,8 @@ class PersonDetector(object):
         self.body_mesh = None
         # face, iris points & measurements
         self.face = face
+        # head points from body model
+        self.head_pts = []
     
     def findIris(self, img):
         '''
@@ -85,25 +87,26 @@ class PersonDetector(object):
                 mp_pose.POSE_CONNECTIONS,
                 landmark_drawing_spec=mp_drawing_styles.get_default_pose_landmarks_style())
             if self.results.pose_world_landmarks:
-                head_pts = []
+                self.head_pts = []
                 for idx, pt in enumerate(self.results.pose_landmarks.landmark):
                     center = np.array(
                         np.multiply([pt.x, pt.y], [self.w, self.h]).astype(int)
                     )
                     if idx in [7,8]:
-                        head_pts.append(center)
+                        self.head_pts.append(center)
                         cv2.circle(img, center, 2, (255,0,255), 2, cv2.LINE_AA)
                         message = f"{idx}"
                         cv2.putText(img, message, (center[0], center[1]-20), cv2.FONT_HERSHEY_SIMPLEX, .5, (0,255,0), 1, cv2.LINE_AA)
+                
                 # maybe use real 3D positions later. All points relative to center of hip joint
-                body_pts = [
-                    {
-                        'x': int(p.x * self.w),
-                        'y': int(p.y * self.h),
-                        'z': p.z,
-                        'visibility':p.visibility
-                    } for p in self.results.pose_world_landmarks.landmark]     
-        return img, head_pts
+                # body_pts = [
+                #     {
+                #         'x': int(p.x * self.w),
+                #         'y': int(p.y * self.h),
+                #         'z': p.z,
+                #         'visibility':p.visibility
+                #     } for p in self.results.pose_world_landmarks.landmark]     
+        return img, self.head_pts
 
     def visualize(self, img):
         '''

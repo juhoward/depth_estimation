@@ -97,28 +97,38 @@ class VidStream(object):
                         self.frame, head_pts = self.detector.findBody(self.frame)
                         self.end = process_time() 
                         self.performance['body'].append(self.end - self.start)
-                        # update depth from head location
-                        self.face.rel2abs()
-                        # don't log head width
-                        self.face.get_headw(head_pts[0], head_pts[1], logging=False)
-                        print(f'median head width: {median(self.face.head_measurements)}')
-                        self.face.s2c_dist(median(self.face.head_measurements), self.face.head_pixw)
-                        # write output to rgb frame
-                        message = 'Face not detected. Using body pose estimates.'
-                        cv2.putText(self.frame, message, (70, 550), cv2.FONT_HERSHEY_SIMPLEX, 1, (255,0,0), 2, cv2.LINE_AA)
-                        message2 = f'S2C dist (ft): {self.face.s2c_d}'
-                        message3 = f'focal length: {round(self.face.f, 2)}'
-                        # message6 = f'mm / pixel - iris plane: {pix_dist}'
-                        messages = [message2, message3]
-                        self.write_messages(messages, self.frame)
-                        depth_frame = self.to_video_frame(depth_frame)
-                        # write output to depth image
-                        message = f'S2C Distance (ft): {round(self.face.abs_depth, 2)}'
-                        message2 = f'Relative Inverse Depth: {round(self.face.ri_depth, 2)}'
-                        message3 = f'RMSE: {round(self.face.rmse(), 2)}'
-                        message4 = f'MAE: {round(self.face.mae(), 2)}'
-                        messages = [message, message2, message3,  message4]
-                        self.write_messages(messages, depth_frame)
+                        if len(head_pts) > 0:
+                            # update depth from head location
+                            self.face.rel2abs()
+                            # don't log head width
+                            self.face.get_headw(head_pts[0], head_pts[1], logging=False)
+                            median_head_w = median(self.face.head_measurements)
+                            print(f'median head width: {median_head_w}')
+                            self.face.s2c_dist(median_head_w, self.face.head_pixw)
+                            # write output to rgb frame
+                            message = 'Face not detected. Using body pose estimates.'
+                            cv2.putText(self.frame, message, (70, 550), cv2.FONT_HERSHEY_SIMPLEX, 1, (255,0,0), 2, cv2.LINE_AA)
+                            message2 = f'S2C dist (ft): {self.face.s2c_d}'
+                            message3 = f'focal length: {round(self.face.f, 2)}'
+                            message4 = f'median head w (in): {round(self.face.mm_to_in(median_head_w), 2)}'
+                            # message6 = f'mm / pixel - iris plane: {pix_dist}'
+                            messages = [message2, message3]
+                            self.write_messages(messages, self.frame)
+                            
+                            # write output to depth image
+                            message = f'S2C Distance (ft): {round(self.face.abs_depth, 2)}'
+                            message2 = f'Relative Inverse Depth: {round(self.face.ri_depth, 2)}'
+                            message3 = f'RMSE: {round(self.face.rmse(), 2)}'
+                            message4 = f'MAE: {round(self.face.mae(), 2)}'
+                            messages = [message, message2, message3,  message4]
+                            self.write_messages(messages, depth_frame)
+                        else:
+                            print('No detection')
+                            message = 'Body not detected.'
+                            depth_frame = self.to_video_frame(depth_frame)
+                            print(depth_frame.shape)
+                            self.write_messages([message], self.frame)
+
                         self.write_output(depth_frame)
                 else:
                     print('Performance stats in FPS:')
@@ -174,6 +184,7 @@ if __name__ == '__main__':
     vid = "/home/jhoward/facedepth/webcam_video.mp4"
     vid2 = "/home/jhoward/facedepth/card_20_10_5.mp4"
     vid3 = "/home/jhoward/facedepth/10ft.mp4"
+    vid4 = "/home/jhoward/facedepth/card_36_120.mp4"
     output = '/home/jhoward/facedepth/midas_output.avi'
     # raw coordinates for card from test data
     CARD = np.array([505, 504, 675, 501])
@@ -188,5 +199,5 @@ if __name__ == '__main__':
     
     estimator = DepthEstimator(model_type)
     detector = PersonDetector(face)
-    video_stream = VidStream(estimator, detector, face, vid3, output)
+    video_stream = VidStream(estimator, detector, face, vid4, output)
     video_stream.stream()
