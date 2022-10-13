@@ -38,11 +38,11 @@ class VidStream(object):
                 self.status, self.frame = self.video.read()
                 self.cnt += 1
                 print(f'Frame: {self.cnt}')
-                # if self.cnt >= 230:
-                #     self.video.release()
-                #     self.writer.release()
-                #     cv2.destroyAllWindows()
-                #     break
+                if self.cnt > 221:
+                    self.video.release()
+                    self.writer.release()
+                    cv2.destroyAllWindows()
+                    break
                 if self.status == True:
                     if cv2.waitKey(1) & 0xff == ord('q'):
                         self.video.release()
@@ -58,10 +58,11 @@ class VidStream(object):
                     depth_frame = self.estimator.predict(self.frame)
                     self.end = process_time() 
                     self.performance['depth'].append(self.end - self.start)
-                    # depth from iris
-                    self.face.get_depth(depth_frame)
+
                     self.face.rel2abs()                
                     if not self.face.mesh is None:
+                        # depth from iris
+                        self.face.get_depth(depth_frame)
                         self.detector.visualize(self.frame)
                         # calculate distances
                         l_diameter = self.face.l_iris['radius'] * 2
@@ -79,8 +80,9 @@ class VidStream(object):
                         message3 = f'Head width (in): {round((self.face.head_w/10) / 2.54, 2)}'
                         message4 = f'head_w_mm: {round(self.face.head_w, 2)}'
                         message5 = f'focal length: {round(self.face.f, 2)}'
+                        message6 = f'Frame: {self.cnt}'
                         # message6 = f'mm / pixel - iris plane: {pix_dist}'
-                        messages = [message, message3, message4, message5]
+                        messages = [message, message3, message4, message5, message6]
                         self.write_messages(messages, self.frame)
                         ######################################
                         depth_frame = self.to_video_frame(depth_frame)
@@ -97,22 +99,25 @@ class VidStream(object):
                         self.frame, head_pts = self.detector.findBody(self.frame)
                         self.end = process_time() 
                         self.performance['body'].append(self.end - self.start)
-                        if len(head_pts) > 0:
+
+                        if head_pts[0] == True:
+                            self.face.head_pts = head_pts[1:]
+                            self.face.get_depth(depth_frame)
                             # update depth from head location
                             self.face.rel2abs()
                             # don't log head width
-                            self.face.get_headw(head_pts[0], head_pts[1], logging=False)
+                            self.face.get_headw(head_pts[1], head_pts[2], logging=False)
                             median_head_w = median(self.face.head_measurements)
-                            print(f'median head width: {median_head_w}')
                             self.face.s2c_dist(median_head_w, self.face.head_pixw)
                             # write output to rgb frame
                             message = 'Face not detected. Using body pose estimates.'
                             cv2.putText(self.frame, message, (70, 550), cv2.FONT_HERSHEY_SIMPLEX, 1, (255,0,0), 2, cv2.LINE_AA)
                             message2 = f'S2C dist (ft): {self.face.s2c_d}'
                             message3 = f'focal length: {round(self.face.f, 2)}'
-                            message4 = f'median head w (in): {round(self.face.mm_to_in(median_head_w), 2)}'
+                            message4 = f'median head w (in): {round(median_head_w / (10 * 2.54), 2)}'
+                            message5 = f'Frame: {self.cnt}'
                             # message6 = f'mm / pixel - iris plane: {pix_dist}'
-                            messages = [message2, message3]
+                            messages = [message2, message3, message4, message5]
                             self.write_messages(messages, self.frame)
                             
                             # write output to depth image
@@ -121,21 +126,20 @@ class VidStream(object):
                             message3 = f'RMSE: {round(self.face.rmse(), 2)}'
                             message4 = f'MAE: {round(self.face.mae(), 2)}'
                             messages = [message, message2, message3,  message4]
+                            depth_frame = self.to_video_frame(depth_frame)
                             self.write_messages(messages, depth_frame)
                         else:
-                            print('No detection')
+                            # print(f'No detection. Face mesh: {type(self.face.mesh)}\nHead pts: {head_pts}')
                             message = 'Body not detected.'
                             depth_frame = self.to_video_frame(depth_frame)
-                            print(depth_frame.shape)
                             self.write_messages([message], self.frame)
-
                         self.write_output(depth_frame)
-                else:
-                    print('Performance stats in FPS:')
-                    print(f"Iris: {1//median(self.performance['iris'])}")
-                    print(f"Body: {1//median(self.performance['body'])}")
-                    print(f"Depth: {1//median(self.performance['depth'])}")
-                    break
+            # elif self.cnt > 160:
+            #     # print('Performance stats in FPS:')
+            #     # print(f"Iris: {1//median(self.performance['iris'])}")
+            #     # print(f"Body: {1//median(self.performance['body'])}")
+            #     # print(f"Depth: {1//median(self.performance['depth'])}")
+            #     break
             else:
                 print(f'Sucessfully read {self.cnt} out of {self.video.get(7)} frames.')
                 break

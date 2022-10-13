@@ -89,10 +89,13 @@ class FaceDet(object):
         # head width in pixels
         self.head_pixw = dist((p1[0], p1[1]), (p2[0], p2[1]))
         # horizontal distance in mm/pixel units : iris plane
-        self.head_w = (self.head_pixw * self.w_iris) / (self.l_iris['radius'] * 2)
-        if logging:
-            self.head_measurements.append(self.head_w)
-    
+        if self.l_iris['radius'] is not None:
+            self.head_w = (self.head_pixw * self.w_iris) / (self.l_iris['radius'] * 2)
+            if logging:
+                self.head_measurements.append(self.head_w)
+        else:
+            self.head_w = 0
+
     def get_depth(self, img):
         '''
         returns the average relative inverse depth of 2 depth pixels.
@@ -101,6 +104,7 @@ class FaceDet(object):
             # if face detected, use iris location depth
             l_ctr = list(map(lambda x: int(x), self.l_iris['center']))
             r_ctr = list(map(lambda x: int(x), self.r_iris['center']))
+            # correction for out of image points
             for idx, (i,j) in enumerate(zip(l_ctr, r_ctr)):
                 if idx == 0:
                     l_ctr[idx] = min(img.shape[0]-1, i)
@@ -113,12 +117,26 @@ class FaceDet(object):
             ri_depth = (left + right) / 2
             self.ri_depth = ri_depth
             self.ri_depths.append(ri_depth)
-        else:
-            d_left = img[self.head_pts[0][0], self.head_pts[0][1]]
-            d_right = img[self.head_pts[1][0], self.head_pts[1][1]]
-            ri_depth = (d_left + d_right) / 2
+        elif self.head_pts is not None:
+            # use head pts from body model
+            # correction for out of image points
+            l_ctr = list(map(lambda x: int(x), self.head_pts[0]))
+            r_ctr = list(map(lambda x: int(x), self.head_pts[1]))
+            for idx, (i,j) in enumerate(zip(l_ctr, r_ctr)):
+                if idx == 0:
+                    l_ctr[idx] = min(img.shape[0]-1, i)
+                    r_ctr[idx] = min(img.shape[0]-1, j)
+                else:
+                    l_ctr[idx] = min(img.shape[1]-1, i)
+                    l_ctr[idx] = min(img.shape[1]-1, j) 
+            left = img[l_ctr[0],l_ctr[1]]
+            right = img[r_ctr[0], r_ctr[1]]
+            ri_depth = (left + right) / 2
             self.ri_depth = ri_depth
             self.ri_depths.append(ri_depth)
+        else:
+            print("no object detected.")
+            self.ri_depth = 0
 
     def rel2abs_2(self, pred_depths, gt_depths):
         '''
@@ -145,14 +163,14 @@ class FaceDet(object):
     
     def rmse(self):
         '''
-        returns rmse of converted abs depths and s2c distsances.
+        returns rmse of converted abs depths and s2c distances.
         '''
         errors = list(map(lambda x: (self.cm_to_ft(x[0]) - x[1])**2, zip(self.s2c_ds, self.abs_depths)))
         return sqrt((sum(errors)/ len(errors)))
 
     def mae(self):
         '''
-        returns mean absolute error of converted abs depth and s2c distances
+        returns mean absolute error of converted abs depthHi and s2c distances
         '''
         errors = list(map(lambda x: abs(self.cm_to_ft(x[0]) - x[1]), zip(self.s2c_ds, self.abs_depths)))
         return sum(errors) / len(errors)

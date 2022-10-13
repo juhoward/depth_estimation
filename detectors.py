@@ -38,8 +38,6 @@ class PersonDetector(object):
         self.body_mesh = None
         # face, iris points & measurements
         self.face = face
-        # head points from body model
-        self.head_pts = []
     
     def findIris(self, img):
         '''
@@ -66,7 +64,7 @@ class PersonDetector(object):
                     self.face.r_iris['center'], self.face.r_iris['radius'] = cv2.minEnclosingCircle(self.face.mesh[self.RIGHT_IRIS])
 
 
-    def findBody(self, img):
+    def findBody(self, img, draw=False):
         '''
         Detect body.
         Returns ear to ear distance in pixels.
@@ -81,19 +79,21 @@ class PersonDetector(object):
 
             self.results = pose.process(img)
             # img.flags.writeable = True
-            mp_drawing.draw_landmarks(
-                img,
-                self.results.pose_landmarks,
-                mp_pose.POSE_CONNECTIONS,
-                landmark_drawing_spec=mp_drawing_styles.get_default_pose_landmarks_style())
-            if self.results.pose_world_landmarks:
-                self.head_pts = []
+            if draw:
+                mp_drawing.draw_landmarks(
+                    img,
+                    self.results.pose_landmarks,
+                    mp_pose.POSE_CONNECTIONS,
+                    landmark_drawing_spec=mp_drawing_styles.get_default_pose_landmarks_style())
+            if self.results.pose_landmarks:
+                head_pts = []
+                head_pts.append(True)
                 for idx, pt in enumerate(self.results.pose_landmarks.landmark):
                     center = np.array(
                         np.multiply([pt.x, pt.y], [self.w, self.h]).astype(int)
                     )
                     if idx in [7,8]:
-                        self.head_pts.append(center)
+                        head_pts.append(center)
                         cv2.circle(img, center, 2, (255,0,255), 2, cv2.LINE_AA)
                         message = f"{idx}"
                         cv2.putText(img, message, (center[0], center[1]-20), cv2.FONT_HERSHEY_SIMPLEX, .5, (0,255,0), 1, cv2.LINE_AA)
@@ -105,8 +105,13 @@ class PersonDetector(object):
                 #         'y': int(p.y * self.h),
                 #         'z': p.z,
                 #         'visibility':p.visibility
-                #     } for p in self.results.pose_world_landmarks.landmark]     
-        return img, self.head_pts
+                #     } for p in self.results.pose_world_landmarks.landmark]
+                return img, head_pts
+            else:
+                print('Detector: Body not detected')
+                head_pts = []
+                head_pts.append(False)
+                return img, head_pts
 
     def visualize(self, img):
         '''
@@ -123,5 +128,8 @@ class PersonDetector(object):
         # credit card points, take these out later
         cv2.circle(img, (505,504), 1, (255,0,255), 2, cv2.LINE_AA)
         cv2.circle(img, (675,501), 1, (255,0,255), 2, cv2.LINE_AA)
+        # credit card pts 2
+        cv2.circle(img, (585,259), 2, (255,0,255), 2, cv2.LINE_AA)
+        cv2.circle(img, (674,262), 2, (255,0,255), 2, cv2.LINE_AA)
         # iris output
         self.frame = img
