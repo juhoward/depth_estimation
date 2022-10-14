@@ -195,11 +195,12 @@ if __name__ == '__main__':
     CARD2 = np.array([584, 257, 676, 257])
     # calculating focal length based on credit card test footage
     # distance to credit card (in)
-    d_2_obj = 20
+    d_2_card = 20
+    d_2_card2 = 36
     # assume standard iris diameter of 11.7 mm
     w_real = 11.7
     # face object holds focal length, face data & calculates s2c_dist
-    face = FaceDet(d_2_obj, CARD2)
+    face = FaceDet(d_2_card2, CARD2)
     
     
     estimator = DepthEstimator(model_type)
