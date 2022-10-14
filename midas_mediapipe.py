@@ -38,11 +38,11 @@ class VidStream(object):
                 self.status, self.frame = self.video.read()
                 self.cnt += 1
                 print(f'Frame: {self.cnt}')
-                if self.cnt > 221:
-                    self.video.release()
-                    self.writer.release()
-                    cv2.destroyAllWindows()
-                    break
+                # if self.cnt > 221:
+                #     self.video.release()
+                #     self.writer.release()
+                #     cv2.destroyAllWindows()
+                #     break
                 if self.status == True:
                     if cv2.waitKey(1) & 0xff == ord('q'):
                         self.video.release()
@@ -134,12 +134,12 @@ class VidStream(object):
                             depth_frame = self.to_video_frame(depth_frame)
                             self.write_messages([message], self.frame)
                         self.write_output(depth_frame)
-            # elif self.cnt > 160:
-            #     # print('Performance stats in FPS:')
-            #     # print(f"Iris: {1//median(self.performance['iris'])}")
-            #     # print(f"Body: {1//median(self.performance['body'])}")
-            #     # print(f"Depth: {1//median(self.performance['depth'])}")
-            #     break
+                else:
+                    print('Performance stats in FPS:')
+                    print(f"Iris: {1//median(self.performance['iris'])}")
+                    print(f"Body: {1//median(self.performance['body'])}")
+                    print(f"Depth: {1//median(self.performance['depth'])}")
+                    break
             else:
                 print(f'Sucessfully read {self.cnt} out of {self.video.get(7)} frames.')
                 break
