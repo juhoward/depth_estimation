@@ -129,7 +129,7 @@ class PersonDetector(object):
         cv2.circle(img, (505,504), 1, (255,0,255), 2, cv2.LINE_AA)
         cv2.circle(img, (675,501), 1, (255,0,255), 2, cv2.LINE_AA)
         # credit card pts 2
-        cv2.circle(img, (585,259), 2, (255,0,255), 2, cv2.LINE_AA)
-        cv2.circle(img, (674,262), 2, (255,0,255), 2, cv2.LINE_AA)
+        cv2.circle(img, (584,257), 2, (255,0,255), 2, cv2.LINE_AA)
+        cv2.circle(img, (676,257), 2, (255,0,255), 2, cv2.LINE_AA)
         # iris output
         self.frame = img
