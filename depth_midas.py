@@ -92,10 +92,11 @@ if __name__ == '__main__':
     #model_type = "DPT_Hybrid"   # MiDaS v3 - Hybrid    (medium accuracy, medium inference speed)
     # model_type = "MiDaS_small"  # MiDaS v2.1 - Small   (lowest accuracy, highest inference speed)
 
-    vid = "/home/jhoward/facedepth/webcam_video.mp4"
-    vid2 = "/home/jhoward/facedepth/card_20_10_5.mp4"
-    vid3 = "/home/jhoward/facedepth/10ft.mp4"
-    output = '/home/jhoward/facedepth/midas_output.avi'
+    vid = "/home/digitalopt/proj/face_depth/webcam_video.mp4"
+    vid2 = "/home/digitalopt/proj/face_depth/card_20_10_5.mp4"
+    vid3 = "/home/digitalopt/proj/face_depth/10ft.mp4"
+    vid4 = "/home/digitalopt/proj/face_depth/occlusion_1_10.mp4"
+    output = '/home/digitalopt/proj/face_depth/midas_output.avi'
     midas = DepthEstimator(model_type)
-    video_stream = VidStream(midas, vid3, output)
+    video_stream = VidStream(midas, vid4, output)
     video_stream.update()

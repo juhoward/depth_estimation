@@ -5,6 +5,7 @@ from time import process_time
 from face import FaceDet
 from depth_midas import DepthEstimator
 from detectors import PersonDetector
+from card_detector.credit_card_classic import CardDetector
 
 
 
@@ -38,11 +39,11 @@ class VidStream(object):
                 self.status, self.frame = self.video.read()
                 self.cnt += 1
                 print(f'Frame: {self.cnt}')
-                # if self.cnt > 221:
-                #     self.video.release()
-                #     self.writer.release()
-                #     cv2.destroyAllWindows()
-                #     break
+                # if self.cnt > 700:
+                    # self.video.release()
+                    # self.writer.release()
+                    # cv2.destroyAllWindows()
+                    # break
                 if self.status == True:
                     if cv2.waitKey(1) & 0xff == ord('q'):
                         self.video.release()
@@ -135,13 +136,13 @@ class VidStream(object):
                             self.write_messages([message], self.frame)
                         self.write_output(depth_frame)
                 else:
+                    print(f'Sucessfully read {self.cnt} out of {self.video.get(7)} frames.')
                     print('Performance stats in FPS:')
                     print(f"Iris: {1//median(self.performance['iris'])}")
                     print(f"Body: {1//median(self.performance['body'])}")
                     print(f"Depth: {1//median(self.performance['depth'])}")
                     break
             else:
-                print(f'Sucessfully read {self.cnt} out of {self.video.get(7)} frames.')
                 break
         self.video.release()
         self.writer.release()
@@ -182,14 +183,15 @@ class VidStream(object):
 if __name__ == '__main__':
     # load depth estimator
     model_type = "DPT_Large"     # MiDaS v3 - Large     (highest accuracy, slowest inference speed)
-    #model_type = "DPT_Hybrid"   # MiDaS v3 - Hybrid    (medium accuracy, medium inference speed)
+    # model_type = "DPT_Hybrid"   # MiDaS v3 - Hybrid    (medium accuracy, medium inference speed)
     # model_type = "MiDaS_small"  # MiDaS v2.1 - Small   (lowest accuracy, highest inference speed)
 
-    vid = "/home/jhoward/facedepth/webcam_video.mp4"
-    vid2 = "/home/jhoward/facedepth/card_20_10_5.mp4"
-    vid3 = "/home/jhoward/facedepth/10ft.mp4"
-    vid4 = "/home/jhoward/facedepth/card_36_120.mp4"
-    output = '/home/jhoward/facedepth/midas_output.avi'
+    vid = "/home/digitalopt/proj/face_depth/webcam_video.mp4"
+    vid2 = "/home/digitalopt/proj/face_depth/card_20_10_5.mp4"
+    vid3 = "/home/digitalopt/proj/face_depth/10ft.mp4"
+    vid4 = "/home/digitalopt/proj/face_depth/card_36_120.mp4"
+    vid5 = "/home/digitalopt/proj/face_depth/occlusion_1_10.mp4"
+    output = '/home/digitalopt/proj/face_depth/midas_output_occlusion.avi'
     # raw coordinates for card from test data
     CARD = np.array([505, 504, 675, 501])
     CARD2 = np.array([584, 257, 676, 257])
@@ -201,9 +203,12 @@ if __name__ == '__main__':
     w_real = 11.7
     # face object holds focal length, face data & calculates s2c_dist
     face = FaceDet(d_2_card2, CARD2)
-    
-    
+    # midas
     estimator = DepthEstimator(model_type)
+    # mediaipipe
     detector = PersonDetector(face)
-    video_stream = VidStream(estimator, detector, face, vid4, output)
+    # card detector
+    card_det = CardDetector()
+    # video stream manager
+    video_stream = VidStream(estimator, detector, face, vid5, output)
     video_stream.stream()
