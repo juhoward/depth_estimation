@@ -11,7 +11,7 @@ class Validator(object):
         self.a1 = a1
         self.a2 = a2
         self.box = box
-        self.b1, self.b2 = self.get_diagonal(box)
+        self.b1, self.b2 = self.get_diagonal()
 
     def get_point(self):
         """ 
@@ -35,9 +35,13 @@ class Validator(object):
         uses bounding box to return diagonal points.
         returns topleft and bottom right bounding box coordinates.
         '''
-        print(self.box)
+        # bottome right point
+        br = self.box[0]
+        # top left
+        tl = self.box[2]
+        return tl, br
     
-    def check_intersect(self, line_coordinates, b_point, p_b_point):
+    def check_intersect(self):
         '''Checks if the path of a tracked object crossed a line.
             b_point: box centroid
             p_b_point: previous box centroid

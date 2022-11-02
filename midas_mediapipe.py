@@ -6,6 +6,7 @@ from face import FaceDet
 from depth_midas import DepthEstimator
 from detectors import PersonDetector
 from card_detector.credit_card_classic import CardDetector
+from card_detector.validator import Validator
 
 
 
@@ -13,9 +14,10 @@ class VidStream(object):
     '''
     a wrapper for OpenCV that accepts an estimater and a detector.
     '''
-    def __init__(self, estimator, detector, face, src=None, output=None):
+    def __init__(self, estimator, detector, card_detector, face, src=None, output=None):
         self.detector = detector
         self.estimator = estimator
+        self.card_detector = card_detector
         self.face = face
         self.video = cv2.VideoCapture(src)
         self.video.set(cv2.CAP_PROP_BUFFERSIZE, 2)
@@ -74,7 +76,7 @@ class VidStream(object):
                         x2, y2 = self.face.mesh[self.detector.HEAD[1]]
                         # head width in pixels
                         self.face.get_headw((x1, y1), (x2, y2))
-                        ######################################
+
                         # write output to rgb frame
                         message = f"S2C Distance (ft) - iris: {self.face.s2c_d}"
                         # message2 = f"S2C Distance (ft) - head: {str(s2c_d2)}"
@@ -84,6 +86,22 @@ class VidStream(object):
                         message6 = f'Frame: {self.cnt}'
                         # message6 = f'mm / pixel - iris plane: {pix_dist}'
                         messages = [message, message3, message4, message5, message6]
+
+                        ######### credit card
+                        proposals = self.card_detector.process_image(self.frame)
+                        if len(proposals) > 0:
+                            # if bounding boxes are returned,
+                            # check if they intersect with head pts
+                            for p in proposals:
+                                # check if credit card is detected near head pts
+                                val = Validator((x1, y1), (x2, y2), p)
+                                intersect = val.check_intersect()
+                                if intersect:
+                                    m = f'Card detected'
+                                    messages.append(m)
+                        
+                        ######################################
+                        
                         self.write_messages(messages, self.frame)
                         ######################################
                         depth_frame = self.to_video_frame(depth_frame)
@@ -210,5 +228,5 @@ if __name__ == '__main__':
     # card detector
     card_det = CardDetector()
     # video stream manager
-    video_stream = VidStream(estimator, detector, face, vid5, output)
+    video_stream = VidStream(estimator, detector, card_det, face, vid5, output)
     video_stream.stream()

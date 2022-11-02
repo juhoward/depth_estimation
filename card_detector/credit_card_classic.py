@@ -13,8 +13,8 @@ Step 7: filter proposed rectangles by aspect ratio
 bounding boxes are returned and should be filtered once more to find those
 near the face.
 '''
-from shapedetector import ShapeDetector
-from validator import Validator
+from .shapedetector import ShapeDetector
+from .validator import Validator
 import imutils
 import cv2
 import numpy as np
