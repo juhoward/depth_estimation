@@ -42,7 +42,6 @@ class Calibrator(object):
         self.objpoints = {name: list() for name in cam_names}
         for cam, pathlist in img_maps.items():
             print(f'reading images for camera {cam}')
-            print(pathlist)
             for path in pathlist:
                 img = cv2.imread(path)
                 gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
@@ -76,8 +75,6 @@ class Calibrator(object):
             newCameraMatrix, roi = cv2.getOptimalNewCameraMatrix(cameraMatrix, distortion, (width, height), 1, (width, height))
             if display == True:
                 for path in img_maps[cam]:
-                    print(f'WHERE THAT HSTACK IMAGE COMES FROM: {path}')
-                    print(f'img_maps[cam]:\n {img_maps[cam]}')
                     img = cv2.imread(path)
                     # simple undistortion
                     undist = cv2.undistort(img, cameraMatrix, distortion, None, newCameraMatrix)
@@ -109,7 +106,7 @@ class Calibrator(object):
                 else:
                     print(k, '\n', len(cams[cam][k]), '\n')
             print('\nProjection Error Report:\n')
-            print(f'ret value: {ret}')
+            print(f'RMSE: {ret}')
             self.cam_params = cams
             self.re_projection_error(cam)
 
@@ -149,7 +146,6 @@ class Calibrator(object):
                 for name, frm in self.rgb_frms.items():
                     filename = base + name + '/' + str(cnt).zfill(2) + '.png'
                     print(f'Writing image : {filename}')
-                    print(frm.shape)
                     cv2.imwrite(filename,frm)
             if cv2.waitKey(1) & 0xff == ord('q'):
                 for name in self.cameras:
@@ -170,7 +166,7 @@ class Calibrator(object):
         )
         stereo_params = {name: parameters for name in cams}
         # This step is performed to transformation between the two cameras,
-        # and calculate Essential and Fundamenatl matrix
+        # and calculate Essential and Fundamental matrix
         retStereo, newCameraMatrixL, distL, newCameraMatrixR, \
         distR, rot, trans, essentialMatrix, fundamentalMatrix = cv2.stereoCalibrate(self.objpoints[cams[0]],
                                                                                     self.imgpoints[cams[0]],
@@ -183,8 +179,9 @@ class Calibrator(object):
                                                                                     criteria_stereo, 
                                                                                     flags=self.flags)
         if retStereo:
-            if retStereo > .5:
-                print(f'High ReProjection error: {retStereo}')
+            if retStereo > 1:
+                print(f'High Re-Projection error: {retStereo}')
+                print('Check stereo image pairs.')
             # unique parameters
             stereo_params[cams[0]]['intrinsic'] = newCameraMatrixL
             stereo_params[cams[0]]['distortion'] = distL
@@ -196,9 +193,7 @@ class Calibrator(object):
             stereo_params['e_Mat'] = essentialMatrix
             stereo_params['f_Mat'] = fundamentalMatrix
             self.stereo_params = stereo_params
-            for k in stereo_params.keys():
-                if k == 'translation':
-                    print(stereo_params[k].shape)
+            print(f'Stereo Calibration Error (RMSE): {retStereo}')
         else:
             print('Stereo Calibration failure...')
 
@@ -260,6 +255,14 @@ class Calibrator(object):
         rectR= cv2.remap(frameR, stereoMapR_x, stereoMapR_y, cv2.INTER_LANCZOS4, cv2.BORDER_CONSTANT, 0)
         if display:
             merged = np.hstack([rectL, rectR])
+            h, w = merged.shape[:2]
+            interval = h // 4
+            y = 0
+            for x in range(4):
+                y += interval
+                pt1 = (0, y)
+                pt2 = (w, y)
+                cv2.line(merged, pt1, pt2, color=(0,255,0))
             cv2.imshow('Stereo Rectified', merged)
             cv2.waitKey(0)
         return rectR, rectL
@@ -283,11 +286,6 @@ class Calibrator(object):
         if not stereo:
             mean_error = 0
             for i in range(len(self.objpoints[cam])):
-                print(f'obj points : {self.objpoints[cam][i].shape}')
-                print(f"rotation points : {self.cam_params[cam]['rotation'][i].shape}")
-                print(f"translation points : {self.cam_params[cam]['translation'][i].shape}")
-
-
                 imgpoints2, _ = cv2.projectPoints(self.objpoints[cam][i],
                                                 self.cam_params[cam]['rotation'][i],
                                                 self.cam_params[cam]['translation'][i],
@@ -302,9 +300,6 @@ class Calibrator(object):
             for cam in cams:
                 mean_error = 0
                 for i in range(len(self.objpoints[cam])):
-                    print(f'obj points : {self.objpoints[cam][i].shape}')
-                    print(f"rotation points : {self.cam_params[cam]['rotation'][i].shape}")
-                    print(f"translation points : {self.cam_params[cam]['translation'][i].shape}")
                     imgpoints2, _ = cv2.projectPoints(self.objpoints[cam][i],
                                                     self.stereo_params['rotation'],
                                                     self.stereo_params['translation'],
@@ -321,16 +316,58 @@ if __name__ == '__main__':
     # thing.capture_stereo_images(cameras)
     thing.get_camera_params(cameras)
     thing.stereo_calibrate()
+    # rig characteristics
+    # focal length
+    f = thing.get_f()
+    # b (cm)
+    b = 3.75*2.54
+
     thing.get_rectification_params()
     # test recftification on calibration images
     img_maps = {name: sorted(glob.glob('./stereo_imgs/' + name + '/*.png')) for name in thing.cam_nms}
-    stereo = cv2.StereoSGBM_create(numDisparities=128, blockSize=15)
+    # stereo disparity solver configuration
+    block_size = 7
+    min_disp = -128
+    max_disp = 128
+    # Maximum disparity minus minimum disparity. The value is always greater than zero.
+    # In the current implementation, this parameter must be divisible by 16.
+    num_disp = max_disp - min_disp
+    # Margin in percentage by which the best (minimum) computed cost function value should "win" the second best value to consider the found match correct.
+    # Normally, a value within the 5-15 range is good enough
+    uniquenessRatio = 5
+    # Maximum size of smooth disparity regions to consider their noise speckles and invalidate.
+    # Set it to 0 to disable speckle filtering. Otherwise, set it somewhere in the 50-200 range.
+    speckleWindowSize = 200
+    # Maximum disparity variation within each connected component.
+    # If you do speckle filtering, set the parameter to a positive value, it will be implicitly multiplied by 16.
+    # Normally, 1 or 2 is good enough.
+    speckleRange = 1
+    disp12MaxDiff = 0
+
+    stereo = cv2.StereoSGBM_create(
+        minDisparity=min_disp,
+        numDisparities=num_disp,
+        blockSize=block_size,
+        uniquenessRatio=uniquenessRatio,
+        speckleWindowSize=speckleWindowSize,
+        speckleRange=speckleRange,
+        disp12MaxDiff=disp12MaxDiff,
+        P1=8 * block_size**2,
+        P2=32 * block_size**2,
+    )
     for pathL, pathR in zip(img_maps[thing.cam_nms[0]], img_maps[thing.cam_nms[1]]):
         imgL = cv2.imread(pathL)
         imgR = cv2.imread(pathR)
-        thing.stereo_rectify(imgL, imgR, display=True)
-        imgL = cv2.imread(pathL, 0)
-        imgR = cv2.imread(pathR, 0)
-        disparity = stereo.compute(imgL,imgR)
-        cv2.imshow('Disparity', disparity)
+        rectL, rectR = thing.stereo_rectify(imgL, imgR, display=True)
+        # imgL = cv2.imread(pathL, 0)
+        # imgR = cv2.imread(pathR, 0)
+        disparity_SGBM = stereo.compute(rectL,rectR)
+        disp_img = cv2.normalize(disparity_SGBM, disparity_SGBM, alpha=255,
+                            beta=0, norm_type=cv2.NORM_MINMAX)
+        disp_img = np.uint8(disp_img)
+        disp_img = cv2.applyColorMap(disp_img, cv2.COLORMAP_MAGMA)
+        cv2.imshow("Disparity Map", disp_img)
+        cv2.imshow('Raw Disparity', disparity_SGBM)
+        depth_map = (b*f) / (disparity_SGBM + 1)
+        cv2.imshow('Raw Depth', depth_map)
         
