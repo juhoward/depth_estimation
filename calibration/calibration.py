@@ -27,21 +27,19 @@ class Calibrator(object):
             cam_names = [''.join(x.split(' ')).lower() for x in cam_names]
         self.cam_nms = cam_names
         img_maps = {name: sorted(glob.glob('./stereo_imgs/' + name + '/*.png')) for name in cam_names}
-        # camera lookup
-        parameters = dict(
-            intrinsic=None,
-            distortion=None,
-            rotation=None,
-            translation=None
-        )
-        cams = {name: parameters for name in cam_names}
+
+        camL = dict()
+        camR = dict()
+        cams = [camL, camR]
+
         # Arrays to store object points and image points from all the images.
         # 2d points in image plane.
         self.imgpoints = {name: list() for name in cam_names}
         # 3d point in real world space
         self.objpoints = {name: list() for name in cam_names}
-        for cam, pathlist in img_maps.items():
-            print(f'reading images for camera {cam}')
+        for cam, cam_name in zip(cams, self.cam_nms):
+            print(f'\nreading images for: {cam_name}\n\n')
+            pathlist = img_maps[cam_name]
             for path in pathlist:
                 img = cv2.imread(path)
                 gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
@@ -53,29 +51,29 @@ class Calibrator(object):
                     # overwrite first corners with subpixel corners
                     corners = cv2.cornerSubPix(gray, corners, (11,11), (-1,-1), self.criteria)
                     # add chessboard point, where z=0
-                    self.objpoints[cam].append(self.objp)
+                    self.objpoints[cam_name].append(self.objp)
                     # add its pixel coordinate
-                    self.imgpoints[cam].append(corners)
+                    self.imgpoints[cam_name].append(corners)
                     if display:
                         # Draw and display the corners
                         cv2.drawChessboardCorners(img, self.chessboardSize, corners, ret)
                         cv2.imshow(path, img)
                         cv2.waitKey(0)
+                        cv2.destroyAllWindows() 
                 else:
                     print(f'Error processing image : {path}')
                     continue
-                # cv2.destroyAllWindows() 
 
-            ############## CALIBRATION #######################################################
-            width, height = self.img_dims
-            ret, cameraMatrix, distortion, rotation, translation = cv2.calibrateCamera(self.objpoints[cam], 
-                                                                        self.imgpoints[cam], (width, height), None, None)
-            # refine camera matrix and return a region of interest
-            # if alpha = 0, it returns undistorted image without some pixels.
-            newCameraMatrix, roi = cv2.getOptimalNewCameraMatrix(cameraMatrix, distortion, (width, height), 1, (width, height))
-            if display == True:
-                for path in img_maps[cam]:
-                    img = cv2.imread(path)
+                ############## CALIBRATION #######################################################
+                width, height = self.img_dims
+                rmse, cameraMatrix, distortion, rotation, translation = cv2.calibrateCamera(self.objpoints[cam_name], 
+                                                                            self.imgpoints[cam_name], (width, height), None, None)
+                print(f'Image: {path}\nRMSE: {rmse}\n')
+
+                if display == True:
+                    # refine camera matrix and return a region of interest
+                    # if alpha = 0, it returns undistorted image without some pixels.
+                    newCameraMatrix, roi = cv2.getOptimalNewCameraMatrix(cameraMatrix, distortion, (width, height), 1, (width, height))
                     # simple undistortion
                     undist = cv2.undistort(img, cameraMatrix, distortion, None, newCameraMatrix)
                     x, y, w, h = roi
@@ -94,21 +92,30 @@ class Calibrator(object):
                     merged = np.vstack([img, undist, undist2])
                     merged = cv2.resize(merged, (1920//2, 1080//2))
                     cv2.imshow('Original Img, Simple Undistortion, Remapped', merged)
-            cams[cam]['intrinsic'] = cameraMatrix
-            cams[cam]['optimal_int'] = newCameraMatrix
-            cams[cam]['distortion'] = distortion
-            cams[cam]['rotation'] = rotation
-            cams[cam]['translation'] = translation
-            print(f'Camera parameters identified for {cam}\n')
-            for k in cams[cam].keys():
-                if not type(cams[cam][k]) == type(tuple()):
-                    print(k, '\n', cams[cam][k].shape, '\n')
+                
+                if 'intrinsic' in cam.keys():
+                    cam['intrinsic'] = np.dstack([cam['intrinsic'], cameraMatrix])
+                    print(f"intrinsic stack size: {cam['intrinsic'].shape}")
+                    cam['distortion'] = np.dstack([cam['distortion'], distortion])
+                    cam['RMSE'].append(rmse)
                 else:
-                    print(k, '\n', len(cams[cam][k]), '\n')
-            print('\nProjection Error Report:\n')
-            print(f'RMSE: {ret}')
-            self.cam_params = cams
-            self.re_projection_error(cam)
+                    cam['intrinsic'] = cameraMatrix
+                    cam['distortion'] = distortion
+                    cam['RMSE'] = [rmse]
+            # reduce to median values
+            cam['intrinsic'] = np.median(cam['intrinsic'] , axis=2)
+            cam['distortion'] = np.median(cam['distortion'] , axis=2)
+            # reduce to mean RMSE
+            cam['RMSE'] = np.mean(cam['RMSE'])
+        cam_params = {name:params for name, params in zip(self.cam_nms, cams)}
+        for k in cam_params.keys():
+            # cams[k]['intrinsic'] = np.median(cams[k]['intrinsic'], axis=2)
+            # cams[k]['distortion'] = np.median(cams[k]['distortion'], axis=2)
+            print(f'\n\nCamera parameters identified for {k}\n')
+            print(f"Intrinsic matrix\n {cam_params[k]['intrinsic']}")
+            print(f"Distortion coefficients\n {cam_params[k]['distortion']}")
+            print(f"RMSE: {cam_params[k]['RMSE']}\n\n")
+        self.cam_params = cam_params
 
     def capture_stereo_images(self, camera_ids):
         self.camera_ids = camera_ids
@@ -180,7 +187,7 @@ class Calibrator(object):
                                                                                     flags=self.flags)
         if retStereo:
             if retStereo > 1:
-                print(f'High Re-Projection error: {retStereo}')
+                print('High Stereo Re-Projection error.')
                 print('Check stereo image pairs.')
             # unique parameters
             stereo_params[cams[0]]['intrinsic'] = newCameraMatrixL
@@ -312,8 +319,10 @@ class Calibrator(object):
 if __name__ == '__main__':
     # configurations
     cameras = {"Camera_L": 0, "Camera_R": 2}
+    stereo_capture = False
     thing = Calibrator()
-    # thing.capture_stereo_images(cameras)
+    if stereo_capture:
+        thing.capture_stereo_images(cameras)
     thing.get_camera_params(cameras)
     thing.stereo_calibrate()
     # rig characteristics
@@ -367,7 +376,7 @@ if __name__ == '__main__':
         disp_img = np.uint8(disp_img)
         disp_img = cv2.applyColorMap(disp_img, cv2.COLORMAP_MAGMA)
         cv2.imshow("Disparity Map", disp_img)
-        cv2.imshow('Raw Disparity', disparity_SGBM)
+        # cv2.imshow('Raw Disparity', disparity_SGBM)
         depth_map = (b*f) / (disparity_SGBM + 1)
-        cv2.imshow('Raw Depth', depth_map)
+        # cv2.imshow('Raw Depth', depth_map)
         
