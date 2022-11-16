@@ -145,33 +145,29 @@ class Stereo_VidStream(object):
                 lines1 = cv2.computeCorrespondEpilines(
                     pts2.reshape(-1, 1, 2), 2, fundamental_matrix)
                 lines1 = lines1.reshape(-1, 3)
-                img5, img6 = drawlines(frames[names[0]], frames[names[1]], lines1, pts1, pts2)
+                img5, img6 = drawlines(frames[names[0]].copy(), frames[names[1]].copy(), lines1, pts1, pts2)
 
                 # Find epilines corresponding to points in left image (first image) and
                 # drawing its lines on right image
                 lines2 = cv2.computeCorrespondEpilines(
                     pts1.reshape(-1, 1, 2), 1, fundamental_matrix)
                 lines2 = lines2.reshape(-1, 3)
-                img3, img4 = drawlines(frames[names[1]], frames[names[0]], lines2, pts2, pts1)
+                img3, img4 = drawlines(frames[names[1]].copy(), frames[names[0]].copy(), lines2, pts2, pts1)
                 epilines = np.hstack((img5, img3))
-                # cv2.imshow("Epilines in both images", epilines)
-                cv2.imshow("epilines, img5, img3", epilines)
+                cv2.imshow("Epilines", epilines)
+
                 # Stereo rectification (uncalibrated variant)
 
                 # Adapted from: https://stackoverflow.com/a/62607343
                 h, w = gray[names[0]].shape[:2]
-                # H1, H2 are homogrpahy matrices
+                # H1, H2 are homography matrices
                 _, H1, H2 = cv2.stereoRectifyUncalibrated(
                     np.float32(pts1), np.float32(pts2), fundamental_matrix, imgSize=(w, h)
                 )
                 # Undistort (rectify) the images and save them
                 # Adapted from: https://stackoverflow.com/a/62607343
-                # img1_rectified = cv2.warpPerspective(frames[names[0]], H1, (w, h))
-                # img2_rectified = cv2.warpPerspective(frames[names[1]], H2, (w, h))
-                # combo = np.hstack((img1_rectified, img2_rectified))
-                # cv2.imshow("rectified", combo)
-                img1_rectified = cv2.warpPerspective(gray[names[0]], H1, (w, h))
-                img2_rectified = cv2.warpPerspective(gray[names[1]], H2, (w, h))
+                img1_rectified = cv2.warpPerspective(frames[names[0]], H1, (w, h))
+                img2_rectified = cv2.warpPerspective(frames[names[1]], H2, (w, h))
                 combo = np.hstack((img1_rectified, img2_rectified))
                 cv2.imshow("rectified", combo) 
                 # ------------------------------------------------------------
@@ -233,7 +229,7 @@ class Stereo_VidStream(object):
                 cv2.imshow("Distance Map", distance_map)
                 print(f'Min distance: {np.min(distance_map)}\nMax distance: {np.max(distance_map)}')
                 print(f'Median distance: {np.median(distance_map)}') 
-
+                cv2.waitKey(0)
         for name in self.cameras:
             cv2.destroyWindow(name)
 

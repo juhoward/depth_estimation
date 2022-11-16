@@ -23,7 +23,6 @@ class Stereo_VidStream(object):
     def stereo_stream(self, disp_mapper):
         print('press "q" to exit...')
         frames = {name:None for name, id in self.camera_ids.items()}
-        grays = {name:None for name, id in self.camera_ids.items()}
         cams = list(frames.keys())
         cnt = 0
         while True:
@@ -31,13 +30,12 @@ class Stereo_VidStream(object):
                 ok, frame = cam.read()
                 if ok:
                     frames[name] = frame
-                    # grays[name] = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
                     cnt +=1
                     # cv2.imshow(name, frame)
                     if self.record:
                         self.writers[name].write(frame)
             if cnt % 2 == 0:
-                rectL, rectR = self.calibrator.stereo_rectify(frames[cams[0]], frames[cams[1]], saved_params=False, display=True)
+                rectL, rectR = self.calibrator.stereo_rectify(frames[cams[0]], frames[cams[1]], saved_params=True, display=True)
                 disparity_SGBM = disp_mapper.compute(rectL,rectR)
                 disp_img = cv2.normalize(disparity_SGBM, disparity_SGBM, alpha=255,
                                          beta=0, norm_type=cv2.NORM_MINMAX)
@@ -54,7 +52,8 @@ class Stereo_VidStream(object):
 
 if __name__ == '__main__':
     # configurations
-    cameras = {"Camera_L": 0, "Camera_R": 2}
+    cameras = {"camera_l": 0, "camera_r": 2}
+    output_dir = './stereo_imgs/'
     # baseline (cm)
     b = 3.75*2.54
     from_saved=False
