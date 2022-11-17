@@ -7,7 +7,7 @@ import os
 
 class Calibrator(object):
     def __init__(self, camera_ids):
-        os.system("bash disable_autofocus.sh")
+        os.system("bash ./calibration/disable_autofocus.sh")
         # represents the inside corners along both edges
         self.chessboardSize = (9,6)
         # termination criteria

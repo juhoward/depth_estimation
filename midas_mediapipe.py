@@ -246,5 +246,5 @@ if __name__ == '__main__':
     # card detector
     card_det = CardDetector()
     # video stream manager
-    video_stream = VidStream(estimator, detector, card_det, face, vid5, output)
+    video_stream = VidStream(estimator, detector, card_det, face, 0, output)
     video_stream.stream()
