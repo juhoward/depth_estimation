@@ -12,7 +12,7 @@ from card_detector.validator import Validator
 
 class VidStream(object):
     '''
-    a wrapper for OpenCV that accepts an estimater and a detector.
+    a wrapper for OpenCV that accepts an estimater and detectors.
     '''
     def __init__(self, estimator, detector, card_detector, face, src=None, output=None):
         self.detector = detector
@@ -99,11 +99,11 @@ class VidStream(object):
                                 if intersect:
                                     m = f'Card detected'
                                     messages.append(m)
-                        
+                                    cv2.drawContours(self.frame, [p], -1, (0, 255, 0), 2)                        
                         ######################################
                         
                         self.write_messages(messages, self.frame)
-                        ######################################
+                        ########## depth
                         depth_frame = self.to_video_frame(depth_frame)
                         # write output to depth image
                         message = f'S2C Distance (ft): {round(self.face.abs_depth, 2)}'
@@ -137,6 +137,24 @@ class VidStream(object):
                             message5 = f'Frame: {self.cnt}'
                             # message6 = f'mm / pixel - iris plane: {pix_dist}'
                             messages = [message2, message3, message4, message5]
+
+                            ######### credit card
+                            proposals = self.card_detector.process_image(self.frame)
+                            if len(proposals) > 0:
+                                # if bounding boxes are returned,
+                                # check if they intersect with head pts
+                                for p in proposals:
+                                    # check if credit card is detected near head pts
+                                    val = Validator((x1, y1), (x2, y2), p)
+                                    intersect = val.check_intersect()
+                                    if intersect:
+                                        m = f'Card detected'
+                                        cv2.drawContours(self.frame, [p], -1, (0, 255, 0), 2)
+                                        # cv2.putText(self.frame, 'card', (cX, cY), cv2.FONT_HERSHEY_SIMPLEX,
+                                        #     0.5, (255, 255, 255), 2)
+                                        messages.append(m)
+                            
+                            ######################################
                             self.write_messages(messages, self.frame)
                             
                             # write output to depth image

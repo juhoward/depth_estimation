@@ -20,7 +20,7 @@ class Stereo_VidStream(object):
                 h = int(self.cameras[name].get(4))
                 fname = './' + name + '.mp4'
                 self.writers[name] = cv2.VideoWriter(fname, self.fourcc, 20, (w, h))
-    def stereo_stream(self, disp_mapper):
+    def stereo_stream(self, disp_mapper, display=False):
         print('press "q" to exit...')
         frames = {name:None for name, id in self.camera_ids.items()}
         cams = list(frames.keys())
@@ -35,13 +35,14 @@ class Stereo_VidStream(object):
                     if self.record:
                         self.writers[name].write(frame)
             if cnt % 2 == 0:
-                rectL, rectR = self.calibrator.stereo_rectify(frames[cams[0]], frames[cams[1]], saved_params=True, display=True)
+                rectL, rectR = self.calibrator.stereo_rectify(frames[cams[0]], frames[cams[1]], saved_params=True)
                 disparity_SGBM = disp_mapper.compute(rectL,rectR)
-                disp_img = cv2.normalize(disparity_SGBM, disparity_SGBM, alpha=255,
-                                         beta=0, norm_type=cv2.NORM_MINMAX)
-                disp_img = np.uint8(disp_img)
-                disp_img = cv2.applyColorMap(disp_img, cv2.COLORMAP_MAGMA)
-                cv2.imshow("Disparity Map", disp_img)
+                if display == True:
+                    self.visualize_disparity(disparity_SGBM)
+                # [(x,y) (w,h)]
+                roi = [(disparity_SGBM.shape[1] // 2, disparity_SGBM.shape[0] // 2), (200,200)]
+                self.get_depth(roi, disparity_SGBM)
+
             if cv2.waitKey(1) & 0xff == ord('q'):
                 cam.release()
                 if self.record:
@@ -50,14 +51,38 @@ class Stereo_VidStream(object):
                     cv2.destroyWindow(name)
                 break
 
+    def visualize_disparity(self, disparity_SGBM):
+        disp_img = cv2.normalize(disparity_SGBM, disparity_SGBM, alpha=255,
+                                        beta=0, norm_type=cv2.NORM_MINMAX)
+        disp_img = np.uint8(disp_img)
+        disp_img = cv2.applyColorMap(disp_img, cv2.COLORMAP_MAGMA)
+        cv2.imshow("Disparity Map", disp_img)
+
+    def get_depth(self, roi, disparity_SGBM, b=3.75*2.54):
+        disp_img = cv2.normalize(disparity_SGBM, disparity_SGBM, alpha=255,
+                                        beta=0, norm_type=cv2.NORM_MINMAX)
+        disp_img = np.uint8(disp_img)
+        disp_img = cv2.applyColorMap(disp_img, cv2.COLORMAP_MAGMA)
+        x, y = roi[0]
+        w, h = roi[1]
+        region = disp_img[y:y+h, x:x+w]
+        cv2.imshow("ROI", region)
+        roi_disparity = disparity_SGBM[y:y+h, x:x+h]
+        median_disp = np.median(roi_disparity)
+        # print(median_disp)
+        f = self.calibrator.get_f()
+        print(f'f:{f}\tb:{b}\tdistance: {(b*f)/median_disp}')
+
+
+
+
 if __name__ == '__main__':
     # configurations
     cameras = {"camera_l": 0, "camera_r": 2}
     output_dir = './stereo_imgs/'
-    # baseline (cm)
-    b = 3.75*2.54
     from_saved=False
     calibrator = Calibrator(cameras)
+
     disp = disparity_mapper(calibrated=True)
     if from_saved:
         # run calibration.py first to save camera parameters
@@ -69,4 +94,4 @@ if __name__ == '__main__':
         calibrator.stereo_calibrate()
         calibrator.get_rectification_params()
         streamer = Stereo_VidStream(cameras, calibrator)
-        streamer.stereo_stream(disp)
+        streamer.stereo_stream(disp, display=True)
