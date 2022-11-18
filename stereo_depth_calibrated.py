@@ -2,6 +2,7 @@ import cv2
 import numpy as np
 import glob
 from statistics import median
+from math import dist
 from calibration.calibration import Calibrator
 from disparity import disparity_mapper
 
@@ -139,7 +140,7 @@ class Stereo_VidStream(object):
                 self.write_messages(messages, depth_frame)
             # if no face is detected, use head points from body pose
             # S2C distance is based on median head width relative to iris diameter
-            else: 
+            else:
                 frm, head_pts = detector.findBody(frm)
                 if head_pts[0] == True:
                     face.head_pts = head_pts[1:]
@@ -167,8 +168,40 @@ class Stereo_VidStream(object):
                     depth_frame = self.to_video_frame(depth_frame)
                     self.write_messages([message], frm)
             # self.write_output(depth_frame)
+
+        for i,j in zip(frames[0].shape, frames[1].shape):
+            if i == j:
+                continue
+            else:
+                print("Image shape mismatch...")
+        xL = self.faceL.head_pts[0][0]
+        yL = self.faceL.head_pts[0][1]
+        wL = abs(xL - self.faceL.head_pts[1][0])
+        hL = abs(yL - self.faceL.head_pts[1][1])
+        roiL = [(xL, yL), (wL,hL)]
+        xR = self.faceR.head_pts[0][0]
+        yR = self.faceR.head_pts[0][1]
+        wR = abs(xR - self.faceR.head_pts[1][0])
+        hR = abs(yR - self.faceR.head_pts[1][1])
+        roiR = [(xR, yR), (wR,hR)]
+        rois = [roiL, roiR]
+        # for frm, roi in zip(frames, rois):
+        #     # only makes sense when left side y point is higher than right side y point
+        #     cv2.rectangle(frm, roi[0], (roi[0][0] + roi[1][0], roi[0][1] + roi[1][1]), (0,0,255), 2)
+        # combo = np.hstack((frames[0], frames[1]))
+        # cv2.imshow('Detections', combo)
+        f = self.calibrator.get_f()
+        b = 3.73*2.54
+        # find disparity
+        d = xL - xR
+        z = (f*b) / d
+        message = f'Distance (in): {round(z/2.54, 2)}'
         combo = np.hstack((frames[0], frames[1]))
+        text_coords = (600, 400)
+        cv2.putText(combo, message, text_coords, 
+                    cv2.FONT_HERSHEY_SIMPLEX, 1, (0,255,0), 2, cv2.LINE_AA)
         cv2.imshow('Detections', combo)
+
         return frames
 
     def write_messages(self, messages, img):

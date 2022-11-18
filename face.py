@@ -28,7 +28,7 @@ class FaceDet(object):
         self.r_iris = {'center': None, 'radius': None}
         # mediapipe face mesh
         self.mesh = None
-        # midiapipe head pts
+        # mediapipe head pts
         self.head_pts = None
         # head width (mm) based on iris diameter (mm)
         self.head_w = 0
