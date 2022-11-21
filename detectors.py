@@ -18,10 +18,11 @@ class PersonDetector(object):
         self.RIGHT_EYE = [33, 7, 163, 144, 145, 153, 154, 155, 133, 173, 157, 158, 159, 160, 161, 246]
         self.LEFT_IRIS = [474, 475, 476, 477]
         self.RIGHT_IRIS = [469, 470, 471, 472]
+
         # horizontal points (left, right), vertical points (top, bottom)
         self.HEAD = [234, 454, 10, 152]
-        # body pose points
-        self.BODY_HEAD = [7, 8]
+        # body pose head points
+        self.BODY_HEAD = [i for i in range(11)]
         # raw coordinates for card from test data
         self.CARD = [505, 504, 675, 501]
         # mediapipe model config
@@ -38,6 +39,8 @@ class PersonDetector(object):
         self.body_mesh = None
         # face, iris points & measurements
         self.face = face
+        # xvalues for gt disparity
+        self.xvals = None
     
     def findIris(self, img):
         '''
@@ -92,7 +95,8 @@ class PersonDetector(object):
                     center = np.array(
                         np.multiply([pt.x, pt.y], [self.w, self.h]).astype(int)
                     )
-                    if idx in [7,8]:
+                    
+                    if idx in range(11):# [7,8]:
                         head_pts.append(center)
                         cv2.circle(img, center, 2, (255,0,255), 2, cv2.LINE_AA)
                         message = f"{idx}"

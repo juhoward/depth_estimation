@@ -54,15 +54,12 @@ class Stereo_VidStream(object):
                         self.writers[name].write(frame)
             if self.cnt % 2 == 0:
                 rectL, rectR = self.calibrator.stereo_rectify(frames[cams[0]], frames[cams[1]], saved_params=True)
+                if display == True:
+                    disparity_SGBM = disp_mapper.compute(rectL,rectR)
+                    self.visualize_disparity(disparity_SGBM)
                 # iris and body detection
                 rect_frames = [rectL, rectR]
                 labeled_frames = self.detect(rect_frames)
-                disparity_SGBM = disp_mapper.compute(rectL,rectR)
-                if display == True:
-                    self.visualize_disparity(disparity_SGBM)
-                # [(x,y) (w,h)]
-                roi = [(disparity_SGBM.shape[1] // 2, disparity_SGBM.shape[0] // 2), (200,200)]
-                self.get_depth(roi, disparity_SGBM)
 
             if cv2.waitKey(1) & 0xff == ord('q'):
                 cam.release()
@@ -105,6 +102,8 @@ class Stereo_VidStream(object):
             face.rel2abs()
             # if a face is detected, base 2c distance on iris diameter
             if not face.mesh is None:
+                # a tuple (left eye, right eye)
+                face.xvals = self.xvals(face, detector)
                 # depth from iris
                 face.get_depth(depth_frame)
                 detector.visualize(frm)
@@ -144,6 +143,7 @@ class Stereo_VidStream(object):
                 frm, head_pts = detector.findBody(frm)
                 if head_pts[0] == True:
                     face.head_pts = head_pts[1:]
+                    face.xvals = self.xvals(face, detector, iris=False)
                     face.get_depth(depth_frame)
                     # update depth from head location
                     face.rel2abs()
@@ -174,36 +174,73 @@ class Stereo_VidStream(object):
                 continue
             else:
                 print("Image shape mismatch...")
-        xL = self.faceL.head_pts[0][0]
-        yL = self.faceL.head_pts[0][1]
-        wL = abs(xL - self.faceL.head_pts[1][0])
-        hL = abs(yL - self.faceL.head_pts[1][1])
-        roiL = [(xL, yL), (wL,hL)]
-        xR = self.faceR.head_pts[0][0]
-        yR = self.faceR.head_pts[0][1]
-        wR = abs(xR - self.faceR.head_pts[1][0])
-        hR = abs(yR - self.faceR.head_pts[1][1])
-        roiR = [(xR, yR), (wR,hR)]
-        rois = [roiL, roiR]
-        # for frm, roi in zip(frames, rois):
-        #     # only makes sense when left side y point is higher than right side y point
-        #     cv2.rectangle(frm, roi[0], (roi[0][0] + roi[1][0], roi[0][1] + roi[1][1]), (0,0,255), 2)
-        # combo = np.hstack((frames[0], frames[1]))
-        # cv2.imshow('Detections', combo)
-        f = self.calibrator.get_f()
-        b = 3.73*2.54
-        # find disparity
-        d = xL - xR
-        z = (f*b) / d
-        message = f'Distance (in): {round(z/2.54, 2)}'
+        # report ground truth distance based on detected keypoints
+        dist = self.get_distances(faces)
+        if dist is not None:
+            message = f'Distance (in): {round(dist, 2)}'
+        else:
+            message = f'No point correspondence.'
         combo = np.hstack((frames[0], frames[1]))
-        text_coords = (600, 400)
+        text_coords = (500, 400)
         cv2.putText(combo, message, text_coords, 
                     cv2.FONT_HERSHEY_SIMPLEX, 1, (0,255,0), 2, cv2.LINE_AA)
         cv2.imshow('Detections', combo)
-
         return frames
 
+    def get_distances(self, faces, b = 3.73*2.54):
+        '''
+        uses the x values from face keypoints to calculate distance to camera.
+        median disparity among the keypoints is used to get a more robust 
+        distance measurement.
+        expected inputs are the face objects from the left and right cameras
+
+        the returned distance is in inches.
+        '''
+        f = self.calibrator.get_f()
+        left = faces[0]
+        right = faces[1]
+
+        # check if both faces contain iris detections
+        if type(left.xvals) == type(tuple()):
+            if type(right.xvals) == type(tuple()):
+                left_iL = left.xvals[0]
+                left_iR = left.xvals[1]
+                right_iL = right.xvals[0]
+                right_iR = right.xvals[1]
+                iL = zip(left_iL, right_iL)
+                iR = zip(left_iR, right_iR)
+                dispL = [l - r for l,r in iL]
+                dispR = [l - r for l,r in iR]
+                medL = median(dispL)
+                medR = median(dispR)
+                disparity = (medL + medR) / 2
+                return ((f * b) / disparity) / 2.54
+            else:
+                print('No point correspondence.')
+        # check if both faces contain body detections
+        elif type(left.xvals) == type(list()):
+            if type(right.xvals) == type(list()):
+                vals = zip(left.xvals, right.xvals)
+                disp = [l - r for l,r in vals] 
+                disparity = median(disp)
+                return ((f * b) / disparity) / 2.54
+            else:
+                print('No point correspondence.')
+
+    def xvals(self, face, detector, iris=True):
+        '''
+        collect x values from keypoint detections. x values are used for disparity
+        '''
+        if iris:
+            xvals_left_i = list(map(lambda x: x[0], face.mesh[detector.LEFT_IRIS]))
+            xvals_right_i = list(map(lambda x: x[0], face.mesh[detector.RIGHT_IRIS]))
+            # print(f'Eye points count: {len(xvals_left_i)+len(xvals_right_i)}')
+            return xvals_right_i, xvals_left_i
+        else:
+            # print(f'Head points count: {len(face.head_pts)}')
+            xvals = list(map(lambda x: x[0], face.head_pts))
+            return xvals
+    
     def write_messages(self, messages, img):
         for idx, m in enumerate(messages):
             cv2.putText(img, m, (50, 50 + idx*50), 
@@ -267,7 +304,7 @@ if __name__ == '__main__':
         # run calibration.py first to save camera parameters
         calibrator.get_rectification_params()
         streamer = Stereo_VidStream(cameras, calibrator, faceL, faceR, estimator)
-        streamer.stereo_stream(disp)
+        streamer.stereo_stream(disp, display=True)
     else:
         img_dir = '/home/digitalopt/proj/face_depth/stereo_depth/calibration/stereo_imgs/'
         calibrator.get_camera_params(img_dir)
