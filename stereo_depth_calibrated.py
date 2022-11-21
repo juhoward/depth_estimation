@@ -9,6 +9,7 @@ from disparity import disparity_mapper
 from face import FaceDet
 from depth_midas import DepthEstimator
 from detectors import PersonDetector
+from utils import Results
 
 class Stereo_VidStream(object):
     def __init__(self,
@@ -26,6 +27,9 @@ class Stereo_VidStream(object):
         self.personR= PersonDetector(self.faceR)
         self.depth_estimator = depth_estimator
         self.calibrator = calibrator
+        self.resultsL = Results()
+        self.resultsR = Results()
+        self.gt = Results()
         self.record = record
         self.cameras = {}
         self.writers = {}
@@ -94,6 +98,7 @@ class Stereo_VidStream(object):
     def detect(self, frames):
         faces = [self.faceL, self.faceR]
         detectors = [self.personL, self.personR]
+        logs = [self.resultsL, self.resultsR]
         for frm, face, detector in zip(frames, faces, detectors):
             face.mesh = None
             detector.findIris(frm)
@@ -127,7 +132,7 @@ class Stereo_VidStream(object):
                 # message6 = f'mm / pixel - iris plane: {pix_dist}'
                 messages = [message, message3, message4, message5, message6]
                 self.write_messages(messages, frm)
-
+ 
                 ########## depth
                 # write output to depth image
                 message = f'S2C Distance (ft): {round(face.abs_depth, 2)}'
@@ -137,6 +142,7 @@ class Stereo_VidStream(object):
                 messages = [message, message2, message3,  message4]
                 depth_frame = self.to_video_frame(depth_frame)
                 self.write_messages(messages, depth_frame)
+
             # if no face is detected, use head points from body pose
             # S2C distance is based on median head width relative to iris diameter
             else:
@@ -176,8 +182,17 @@ class Stereo_VidStream(object):
                 print("Image shape mismatch...")
         # report ground truth distance based on detected keypoints
         dist = self.get_distances(faces)
+
         if dist is not None:
             message = f'Distance (in): {round(dist, 2)}'
+            # record ground truth distance
+            self.gt.update(dist, 'gt')
+            for face, results in zip(faces, logs):
+                # record relative inverse depth
+                results.update(face.ri_depth, 'neural_depth')
+                # record triangulation based subject to camera distance
+                results.update(face.s2c_d, 'triangle')
+
         else:
             message = f'No point correspondence.'
         combo = np.hstack((frames[0], frames[1]))
@@ -185,7 +200,6 @@ class Stereo_VidStream(object):
         cv2.putText(combo, message, text_coords, 
                     cv2.FONT_HERSHEY_SIMPLEX, 1, (0,255,0), 2, cv2.LINE_AA)
         cv2.imshow('Detections', combo)
-        return frames
 
     def get_distances(self, faces, b = 3.73*2.54):
         '''
@@ -300,6 +314,7 @@ if __name__ == '__main__':
     # stereo calibration
     calibrator = Calibrator(cameras)
     disp = disparity_mapper(calibrated=False)
+
     if from_saved:
         # run calibration.py first to save camera parameters
         calibrator.get_rectification_params()
