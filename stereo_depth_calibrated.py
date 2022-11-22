@@ -115,7 +115,7 @@ class Stereo_VidStream(object):
                 # calculate distances
                 l_diameter = face.l_iris['radius'] * 2
                 # s2c distance
-                face.s2c_dist(face.w_iris, l_diameter)
+                face.s2c_dist(face.w_iris, l_diameter, inches=True)
                 # head points
                 x1, y1 = face.mesh[detector.HEAD[0]]
                 x2, y2 = face.mesh[detector.HEAD[1]]
@@ -123,7 +123,7 @@ class Stereo_VidStream(object):
                 face.get_headw((x1, y1), (x2, y2))
 
                 # write output to rgb frame
-                message = f"S2C Distance (ft) - iris: {face.s2c_d}"
+                message = f"S2C Distance (in) - iris: {round(face.s2c_d, 2)}"
                 # message2 = f"S2C Distance (ft) - head: {str(s2c_d2)}"
                 message3 = f'Head width (in): {round((face.head_w/10) / 2.54, 2)}'
                 message4 = f'head_w_mm: {round(face.head_w, 2)}'
@@ -154,13 +154,13 @@ class Stereo_VidStream(object):
                     # update depth from head location
                     face.rel2abs()
                     # don't log head width, won't be accurate w/o iris diameter
-                    face.get_headw(head_pts[1], head_pts[2], logging=False)
+                    face.get_headw(head_pts[7], head_pts[8], logging=False)
                     median_head_w = median(face.head_measurements)
                     face.s2c_dist(median_head_w, face.head_pixw)
                     # write output to rgb frame
                     message = 'Face not detected. Using body pose estimates.'
                     cv2.putText(frm, message, (70, 550), cv2.FONT_HERSHEY_SIMPLEX, 1, (255,0,0), 2, cv2.LINE_AA)
-                    message2 = f'S2C dist (ft): {face.s2c_d}'
+                    message2 = f'S2C dist (in): {round(face.s2c_d, 2)}'
                     message3 = f'focal length: {round(face.f, 2)}'
                     message4 = f'median head w (in): {round(median_head_w / (10 * 2.54), 2)}'
                     message5 = f'Frame: {self.cnt}'
@@ -187,12 +187,18 @@ class Stereo_VidStream(object):
             message = f'Distance (in): {round(dist, 2)}'
             # record ground truth distance
             self.gt.update(dist, 'gt')
-            for face, results in zip(faces, logs):
+            for face, log in zip(faces, logs):
                 # record relative inverse depth
-                results.update(face.ri_depth, 'neural_depth')
+                log.update(face.ri_depth, 'neural_depth')
                 # record triangulation based subject to camera distance
-                results.update(face.s2c_d, 'triangle')
-
+                log.update(face.s2c_d, 'triangle')
+                log.rmse(log.history['triangle'], self.gt.history['gt'], 'triangle')
+                log.mae(log.history['triangle'], self.gt.history['gt'], 'triangle')
+                log.rmse(log.history['neural_depth'], self.gt.history['gt'], 'neural_depth')
+                log.mae(log.history['neural_depth'], self.gt.history['gt'], 'neural_depth')
+                print(f"gt: {median(self.gt.history['gt'])}\ntriangle:{median(log.history['triangle'])}\nneural depth: {median(log.history['neural_depth'])}")
+                # print(f"\nTriangle\nRMSE: {log.results['triangle_rmse']}\nMAE:{log.results['triangle_mae']}")
+                # print(f"\nNeural Depth\nRMSE: {log.results['neural_depth_rmse']}\nMAE:{log.results['neural_depth_mae']}")
         else:
             message = f'No point correspondence.'
         combo = np.hstack((frames[0], frames[1]))
@@ -298,11 +304,11 @@ if __name__ == '__main__':
 
     # raw coordinates for card from test data
     CARD = np.array([505, 504, 675, 501])
-    CARD2 = np.array([584, 257, 676, 257])
+    CARD2 = np.array([315, 240, 402, 240])
     # calculating focal length based on credit card test footage
     # distance to credit card (in)
     d_2_card = 20
-    d_2_card2 = 36
+    d_2_card2 = 20
     # assume standard iris diameter of 11.7 mm
     w_real = 11.7
 

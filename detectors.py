@@ -130,10 +130,10 @@ class PersonDetector(object):
         cv2.line(img, self.face.mesh[self.HEAD[0]], self.face.mesh[self.HEAD[1]], (0,255,0), 1, cv2.LINE_AA)
         cv2.line(img, self.face.mesh[self.HEAD[2]], self.face.mesh[self.HEAD[3]], (0,255,0), 1, cv2.LINE_AA)
         # credit card points, take these out later
-        cv2.circle(img, (505,504), 1, (255,0,255), 2, cv2.LINE_AA)
-        cv2.circle(img, (675,501), 1, (255,0,255), 2, cv2.LINE_AA)
+        # cv2.circle(img, (505,504), 1, (255,0,255), 2, cv2.LINE_AA)
+        # cv2.circle(img, (675,501), 1, (255,0,255), 2, cv2.LINE_AA)
         # credit card pts 2
-        cv2.circle(img, (584,257), 2, (255,0,255), 2, cv2.LINE_AA)
-        cv2.circle(img, (676,257), 2, (255,0,255), 2, cv2.LINE_AA)
+        cv2.circle(img, (315,240), 1, (255,0,255), 2, cv2.LINE_AA)
+        cv2.circle(img, (402,240), 1, (255,0,255), 2, cv2.LINE_AA)
         # iris output
         self.frame = img

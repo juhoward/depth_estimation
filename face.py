@@ -40,6 +40,10 @@ class FaceDet(object):
         self.s2c_d = 0
         # s2c (cm)
         self.s2c_ds = []
+        # grouund truth s2c distances (stereo-based)
+        self.gt_s2c = 0
+        self.gt_s2cs = []
+        
         # average relative inverse depth (iris, head)
         self.ri_depth = 0
         self.ri_depths = []
@@ -61,7 +65,7 @@ class FaceDet(object):
         '''
         return (self.d_2_obj * self.w_pix) / self.w_card
 
-    def s2c_dist(self, w_object, w_pix):
+    def s2c_dist(self, w_object, w_pix, inches=True):
         '''
         returns the subject-to-camera distance in mm using triangle similarity.
         f : known focal length in mm
@@ -73,8 +77,12 @@ class FaceDet(object):
         s2c_d /= 10
         # log metric distance (cm) for parameter estimation
         self.s2c_ds.append(s2c_d)
-        # return distance in ft
-        s2c_d = self.cm_to_ft(s2c_d)
+        if inches == True:
+            # return distance in inches
+            s2c_d = s2c_d / 2.54
+        else:
+            # return distance in ft
+            s2c_d = self.cm_to_ft(s2c_d)
         # keep state for reporting
         self.s2c_d = s2c_d
 
@@ -161,18 +169,26 @@ class FaceDet(object):
         self.abs_depth = abs_depth
         self.abs_depths.append(abs_depth)
     
-    def rmse(self):
+    def rmse(self, feet=False):
         '''
         returns rmse of converted abs depths and s2c distances.
         '''
-        errors = list(map(lambda x: (self.cm_to_ft(x[0]) - x[1])**2, zip(self.s2c_ds, self.abs_depths)))
+        if feet:
+            errors = list(map(lambda x: (self.cm_to_ft(x[0]) - x[1])**2, zip(self.s2c_ds, self.abs_depths)))
+        else:
+            # error in inches
+            errors = list(map(lambda x: ((x[0] / 2.54) - x[1])**2, zip(self.s2c_ds, self.abs_depths)))
         return sqrt((sum(errors)/ len(errors)))
 
-    def mae(self):
+    def mae(self, feet=False):
         '''
         returns mean absolute error of converted abs depthHi and s2c distances
         '''
-        errors = list(map(lambda x: abs(self.cm_to_ft(x[0]) - x[1]), zip(self.s2c_ds, self.abs_depths)))
+        if feet:
+            errors = list(map(lambda x: abs(self.cm_to_ft(x[0]) - x[1]), zip(self.s2c_ds, self.abs_depths)))
+        else:
+            # inches
+            errors = list(map(lambda x: abs((x[0] / 2.54) - x[1]), zip(self.s2c_ds, self.abs_depths)))
         return sum(errors) / len(errors)
 
     def mm2cm(self, dist):
