@@ -1,6 +1,6 @@
 from math import sqrt, dist
 from statistics import median, mean
-
+import csv
 
 class res_dict(dict):
     def __init__(self):
@@ -36,3 +36,13 @@ class Results(object):
             self.history.add(method_name, dist)
         else:
             self.history[method_name].append(dist)
+    
+    def write_csv(self, camera_name, method_name):
+        print(f'Writing data to file: ./results/{camera_name}_{method_name}.csv')
+        print(f'Series length: {len(self.history[method_name])}')
+        with open(f'./{camera_name}_{method_name}.csv', 'w') as f:
+            writer  = csv.writer(f)
+            
+            time_steps = [i for i in range(len(self.history[method_name]))]
+            writer.writerow(time_steps)
+            writer.writerow(self.history[method_name])

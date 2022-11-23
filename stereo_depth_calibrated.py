@@ -12,6 +12,9 @@ from detectors import PersonDetector
 from utils import Results
 
 class Stereo_VidStream(object):
+    '''
+    
+    '''
     def __init__(self,
                  camera_ids:dict, 
                  calibrator,
@@ -35,7 +38,7 @@ class Stereo_VidStream(object):
         self.writers = {}
         self.fourcc = cv2.VideoWriter_fourcc(*'mp4v')
         for name, id in camera_ids.items():
-            cv2.namedWindow(name)
+            # cv2.namedWindow(name)
             self.cameras[name] = cv2.VideoCapture(id)
             if self.record:
                 w = int(self.cameras[name].get(3))
@@ -63,14 +66,21 @@ class Stereo_VidStream(object):
                     self.visualize_disparity(disparity_SGBM)
                 # iris and body detection
                 rect_frames = [rectL, rectR]
-                labeled_frames = self.detect(rect_frames)
+                self.detect(rect_frames)
 
             if cv2.waitKey(1) & 0xff == ord('q'):
+                logs = [self.gt, self.resultsL, self.resultsR]
+                methods = ['gt', 'triangle', 'neural_depth']
                 cam.release()
                 if self.record:
                     self.writers[name].release()
-                for name in self.cameras:
-                    cv2.destroyWindow(name)
+                for name in (self.cameras):
+                    for method in methods:
+                        if method == 'gt':
+                            logs[0].write_csv('gt', 'gt')
+                        else:
+                            for log in logs[1:]:
+                                log.write_csv(name, method)
                 break
 
     def visualize_disparity(self, disparity_SGBM):
