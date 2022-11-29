@@ -22,8 +22,10 @@ class FaceDet(object):
         self.w_pix = dist(points[:2],  points[2:])
         # converts an initial distance in inches to mm
         self.d_2_obj = self.in_to_mm(d_2_obj)
-        # computes focal length of camera
+        # computes focal length of camera using credit card
         self.f = self.f_length()
+        # focal length using assumed iris diameter
+        self.f_iris = 0
         self.l_iris = {'center': None, 'radius': None}
         self.r_iris = {'center': None, 'radius': None}
         # mediapipe face mesh
@@ -36,8 +38,10 @@ class FaceDet(object):
         self.head_pixw = 0
         # holds head measurements
         self.head_measurements = []
-        # subject-to-camera distance (in)
+        # subject-to-camera distance using credit card(in)
         self.s2c_d = 0
+        # subject-to-camera distance using f_iris (in)
+        self.s2c_d_i = 0
         # s2c (cm)
         self.s2c_ds = []
         # grouund truth s2c distances (stereo-based)
@@ -54,8 +58,7 @@ class FaceDet(object):
         self.error = 0
         self.errors = []
 
-
-    def f_length(self):
+    def f_length(self, card=True):
         ''' 
         returns the focal length based on triangle similarity.
         d_2_obj : known distance to the object
@@ -63,7 +66,10 @@ class FaceDet(object):
         w_pix : distance in pixels
         TODO: test change in w_card to iris diameter
         '''
-        return (self.d_2_obj * self.w_pix) / self.w_card
+        if card == True:
+            return (self.d_2_obj * self.w_pix) / self.w_card
+        else:
+            return (self.d_2_obj * self.w_pix) / self.w_iris
 
     def s2c_dist(self, w_object, w_pix, inches=True):
         '''
@@ -72,20 +78,25 @@ class FaceDet(object):
         w_object : known width of object in mm
         w_pix : distance in pixels
         '''
+        # using credit card focal length
         s2c_d = (self.f * w_object) / w_pix
+        # using iris focal length
+        s2c_d_i = (self.f_iris * w_object) / w_pix
         # transform mm to cm
         s2c_d /= 10
+        s2c_d_i /= 10
         # log metric distance (cm) for parameter estimation
         self.s2c_ds.append(s2c_d)
         if inches == True:
             # return distance in inches
             s2c_d = s2c_d / 2.54
+            s2c_d_i = s2c_d_i / 2.54
         else:
             # return distance in ft
             s2c_d = self.cm_to_ft(s2c_d)
         # keep state for reporting
         self.s2c_d = s2c_d
-
+        self.s2c_d_i = s2c_d_i
 
     def get_headw(self, p1, p2, logging=True):
         '''
@@ -165,7 +176,7 @@ class FaceDet(object):
         a simple linear transformation.
         division by 2.54 to convert to inches.
         '''
-        abs_depth = self.ri_depth / 2.54
+        abs_depth = self.ri_depth
         self.abs_depth = abs_depth
         self.abs_depths.append(abs_depth)
     

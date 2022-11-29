@@ -269,7 +269,7 @@ class Calibrator(object):
             cv2.waitKey(0)
         return rectR, rectL
 
-    def get_f(self):
+    def get_calibrated_f(self):
         # assumes cameras have similar focal lengths
         if self.stereo_params:
             f_xs = 0
@@ -283,6 +283,13 @@ class Calibrator(object):
             return (f_xs + f_ys) // 4
         else:
             print('Cameras not calibrated!')
+            
+    def get_uncalibrated_f(self, d_2_obj, w_pix, w_iris=11.7):
+        '''
+        returns focal length based on the detected 
+        iris's distance from the camera
+        '''
+        return (d_2_obj * w_pix) / w_iris
     
     def re_projection_error(self, cam, stereo=False):
         if not stereo:
@@ -324,7 +331,7 @@ if __name__ == '__main__':
     # rig characteristics
     # focal length
 
-    f = thing.get_f()
+    f = thing.get_calibrated_f()
     # b (cm)
     b = 3.75*2.54
 

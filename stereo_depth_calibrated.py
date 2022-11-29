@@ -9,6 +9,7 @@ from disparity import disparity_mapper
 from face import FaceDet
 from depth_midas import DepthEstimator
 from detectors import PersonDetector
+from mono_calibrate import MonoCalibrator
 from utils import Results
 
 class Stereo_VidStream(object):
@@ -38,13 +39,13 @@ class Stereo_VidStream(object):
         self.writers = {}
         self.fourcc = cv2.VideoWriter_fourcc(*'mp4v')
         for name, id in camera_ids.items():
-            # cv2.namedWindow(name)
             self.cameras[name] = cv2.VideoCapture(id)
             if self.record:
                 w = int(self.cameras[name].get(3))
                 h = int(self.cameras[name].get(4))
                 fname = './' + name + '.mp4'
                 self.writers[name] = cv2.VideoWriter(fname, self.fourcc, 20, (w, h))
+    
     def stereo_stream(self, disp_mapper, display=False):
         print('press "q" to exit...')
         frames = {name:None for name, id in self.camera_ids.items()}
@@ -90,7 +91,7 @@ class Stereo_VidStream(object):
         disp_img = cv2.applyColorMap(disp_img, cv2.COLORMAP_MAGMA)
         cv2.imshow("Disparity Map", disp_img)
 
-    def get_depth(self, roi, disparity_SGBM, b=3.75*2.54):
+    def get_depth(self, roi, disparity_SGBM, b=3.75*2.54, calibrated=True):
         disp_img = cv2.normalize(disparity_SGBM, disparity_SGBM, alpha=255,
                                         beta=0, norm_type=cv2.NORM_MINMAX)
         disp_img = np.uint8(disp_img)
@@ -101,8 +102,10 @@ class Stereo_VidStream(object):
         cv2.imshow("ROI", region)
         roi_disparity = disparity_SGBM[y:y+h, x:x+h]
         median_disp = np.median(roi_disparity)
-        # print(median_disp)
-        f = self.calibrator.get_f()
+        if calibrated:
+            f = self.calibrator.get_calibrated_f()
+        else:
+            f = self.calibrator.get_uncalibrated_f()
         print(f'SGBM method - f:{f}\tb:{b}\tdistance: {(b*f)/median_disp}')
 
     def detect(self, frames):
@@ -113,7 +116,8 @@ class Stereo_VidStream(object):
             face.mesh = None
             detector.findIris(frm)
             depth_frame = self.depth_estimator.predict(frm)
-
+            #  TODO: find a decent linear transformation that 
+            # works from short distances to 10 ft.
             face.rel2abs()
             # if a face is detected, base 2c distance on iris diameter
             if not face.mesh is None:
@@ -133,11 +137,11 @@ class Stereo_VidStream(object):
                 face.get_headw((x1, y1), (x2, y2))
 
                 # write output to rgb frame
-                message = f"S2C Distance (in) - iris: {round(face.s2c_d, 2)}"
-                # message2 = f"S2C Distance (ft) - head: {str(s2c_d2)}"
+                message = f"S2C Distance (in) - card: {round(face.s2c_d, 2)}"
+                message2 = f"S2C Distance (in) - iris: {round(face.s2c_d_i, 2)}"
                 message3 = f'Head width (in): {round((face.head_w/10) / 2.54, 2)}'
-                message4 = f'head_w_mm: {round(face.head_w, 2)}'
-                message5 = f'focal length: {round(face.f, 2)}'
+                message4 = f'focal length (credit card): {round(face.f, 2)}'
+                message5 = f'focal length (iris 11.7mm): {round(face.f_iris, 2)}'
                 message6 = f'Frame: {self.cnt}'
                 # message6 = f'mm / pixel - iris plane: {pix_dist}'
                 messages = [message, message3, message4, message5, message6]
@@ -170,8 +174,8 @@ class Stereo_VidStream(object):
                     # write output to rgb frame
                     message = 'Face not detected. Using body pose estimates.'
                     cv2.putText(frm, message, (70, 550), cv2.FONT_HERSHEY_SIMPLEX, 1, (255,0,0), 2, cv2.LINE_AA)
-                    message2 = f'S2C dist (in): {round(face.s2c_d, 2)}'
-                    message3 = f'focal length: {round(face.f, 2)}'
+                    message2 = f'S2C dist (in) - card: {round(face.s2c_d, 2)}'
+                    message3 = f'S2C dist (in) - iris: {round(face.s2c_d_i, 2)}'
                     message4 = f'median head w (in): {round(median_head_w / (10 * 2.54), 2)}'
                     message5 = f'Frame: {self.cnt}'
                     # message6 = f'mm / pixel - iris plane: {pix_dist}'
@@ -217,7 +221,7 @@ class Stereo_VidStream(object):
                     cv2.FONT_HERSHEY_SIMPLEX, 1, (0,255,0), 2, cv2.LINE_AA)
         cv2.imshow('Detections', combo)
 
-    def get_distances(self, faces, b = 3.73*2.54):
+    def get_distances(self, faces, b = 3.73*2.54, calibrated=True):
         '''
         uses the x values from face keypoints to calculate distance to camera.
         median disparity among the keypoints is used to get a more robust 
@@ -226,7 +230,10 @@ class Stereo_VidStream(object):
 
         the returned distance is in inches.
         '''
-        f = self.calibrator.get_f()
+        if calibrated:
+            f = self.calibrator.get_calibrated_f()
+        else:
+            f = self.calibrator.get_uncalibrated_f()
         left = faces[0]
         right = faces[1]
 
@@ -276,11 +283,6 @@ class Stereo_VidStream(object):
             cv2.putText(img, m, (50, 50 + idx*50), 
                 cv2.FONT_HERSHEY_SIMPLEX, 1, (0,255,0), 2, cv2.LINE_AA)
 
-    # def detect_points(self, img):
-    #     detector.findIris(img)
-    #     if not self.face.mesh:
-    #         detector.findBody(img)
-
     def to_video_frame(self, img):
         ''' 
         transforms midas depth frame to a video frame.
@@ -307,6 +309,8 @@ if __name__ == '__main__':
     calibration_imgs = './calibration/stereo_imgs/'
     # load stereo camera calibration data?
     from_saved=False
+    # mono calibrate?
+    get_iris_focal_length = False
     # select a neural depth estimator
     model_type = "DPT_Large"     # MiDaS v3 - Large     (highest accuracy, slowest inference speed)
     # model_type = "DPT_Hybrid"   # MiDaS v3 - Hybrid    (medium accuracy, medium inference speed)
@@ -325,6 +329,16 @@ if __name__ == '__main__':
     # face object holds focal length, face data & calculates s2c_dist
     faceL = FaceDet(d_2_card2, CARD2)
     faceR = FaceDet(d_2_card2, CARD2)
+    if get_iris_focal_length:
+        # monocular calibration
+        monocal = MonoCalibrator(cameras, faceL, 12*25.4)
+        # find focal length using assumed iris width
+        f_length_iris = monocal.stream()
+    else:
+        # last focal length obtained
+        f_length_iris = 573.4293
+    for face in [faceL, faceR]:
+        face.f_iris = f_length_iris
     # midas
     estimator = DepthEstimator(model_type)
     # stereo calibration
