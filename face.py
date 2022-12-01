@@ -174,9 +174,9 @@ class FaceDet(object):
     def rel2abs(self):
         '''
         a simple linear transformation.
-        division by 2.54 to convert to inches.
+        only works on distances less than 36 in.
         '''
-        abs_depth = self.ri_depth
+        abs_depth = 1000 / self.ri_depth
         self.abs_depth = abs_depth
         self.abs_depths.append(abs_depth)
     

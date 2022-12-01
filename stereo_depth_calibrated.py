@@ -71,7 +71,7 @@ class Stereo_VidStream(object):
 
             if cv2.waitKey(1) & 0xff == ord('q'):
                 logs = [self.gt, self.resultsL, self.resultsR]
-                methods = ['gt', 'triangle', 'neural_depth']
+                methods = ['gt', 'triangle', 'triangle_f_iris', 'neural_depth']
                 cam.release()
                 if self.record:
                     self.writers[name].release()
@@ -143,8 +143,9 @@ class Stereo_VidStream(object):
                 message4 = f'focal length (credit card): {round(face.f, 2)}'
                 message5 = f'focal length (iris 11.7mm): {round(face.f_iris, 2)}'
                 message6 = f'Frame: {self.cnt}'
+                message7 = f'GT focal length: {round(self.calibrator.get_calibrated_f(),2)}'
                 # message6 = f'mm / pixel - iris plane: {pix_dist}'
-                messages = [message, message3, message4, message5, message6]
+                messages = [message, message3, message4, message5, message6, message7]
                 self.write_messages(messages, frm)
  
                 ########## depth
@@ -195,7 +196,7 @@ class Stereo_VidStream(object):
             else:
                 print("Image shape mismatch...")
         # report ground truth distance based on detected keypoints
-        dist = self.get_distances(faces)
+        dist = self.get_gt_distance(faces)
 
         if dist is not None:
             message = f'Distance (in): {round(dist, 2)}'
@@ -206,28 +207,31 @@ class Stereo_VidStream(object):
                 log.update(face.ri_depth, 'neural_depth')
                 # record triangulation based subject to camera distance
                 log.update(face.s2c_d, 'triangle')
+                # triangulation based using focal length from iris assumption
+                log.update(face.s2c_d_i, 'triangle_f_iris')
                 log.rmse(log.history['triangle'], self.gt.history['gt'], 'triangle')
                 log.mae(log.history['triangle'], self.gt.history['gt'], 'triangle')
                 log.rmse(log.history['neural_depth'], self.gt.history['gt'], 'neural_depth')
                 log.mae(log.history['neural_depth'], self.gt.history['gt'], 'neural_depth')
-                print(f"gt: {median(self.gt.history['gt'])}\ntriangle:{median(log.history['triangle'])}\nneural depth: {median(log.history['neural_depth'])}")
-                # print(f"\nTriangle\nRMSE: {log.results['triangle_rmse']}\nMAE:{log.results['triangle_mae']}")
+                # print(f"gt: {median(self.gt.history['gt'])}\ntriangle:{median(log.history['triangle'])}\nneural depth: {median(log.history['neural_depth'])}")
+                print(f"\nTriangle\nRMSE: {log.results['triangle_rmse']}\nMAE:{log.results['triangle_mae']}")
                 # print(f"\nNeural Depth\nRMSE: {log.results['neural_depth_rmse']}\nMAE:{log.results['neural_depth_mae']}")
         else:
-            message = f'No point correspondence.'
+            message = 'No point correspondence.'
         combo = np.hstack((frames[0], frames[1]))
         text_coords = (500, 400)
         cv2.putText(combo, message, text_coords, 
                     cv2.FONT_HERSHEY_SIMPLEX, 1, (0,255,0), 2, cv2.LINE_AA)
         cv2.imshow('Detections', combo)
 
-    def get_distances(self, faces, b = 3.73*2.54, calibrated=True):
+    def get_gt_distance(self, faces, b = 3.73*2.54, calibrated=True):
         '''
+        expected inputs are the face objects from the left and right cameras
+
         uses the x values from face keypoints to calculate distance to camera.
         median disparity among the keypoints is used to get a more robust 
         distance measurement.
-        expected inputs are the face objects from the left and right cameras
-
+        
         the returned distance is in inches.
         '''
         if calibrated:
