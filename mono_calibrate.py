@@ -50,21 +50,17 @@ class MonoCalibrator(object):
                 output = self.detect(self.face, self.detector, frame)
                 if output[0] == True:
                     self.cnt +=1
-                    f, w_iris, w_iris2 = output[1:]
+                    f, w_iris = output[1:]
                     f_lengths.append(f)
                     w_irises.append(w_iris)
-                    w_irises2.append(w_iris2)
                     m = f'Captured {self.cnt} out of 40 images.'
                     m2 = f'Iris diameter - {round(w_iris, 2)}'
-                    m3 = f'Iris diameter 2 - {round(w_iris2, 2)}'
                     cv2.putText(frame, m, (50,50),
                                 cv2.FONT_HERSHEY_SIMPLEX, 1, (0,255,0), 2, cv2.LINE_AA)
                     cv2.putText(frame, m2, (50,100),
                                 cv2.FONT_HERSHEY_SIMPLEX, 1, (0,255,0), 2, cv2.LINE_AA)
-                    cv2.putText(frame, m3, (50,150),
-                                cv2.FONT_HERSHEY_SIMPLEX, 1, (0,255,0), 2, cv2.LINE_AA)
-                    # self.detector.visualize(frame)
-                    frame = self.show_iris_kpts(frame)
+                    self.detector.visualize(frame)
+                    # frame = self.show_iris_kpts(frame)
                     cv2.imshow('capture', frame)
                 if self.cnt > 39:
                     # update iris-based focal length 
@@ -73,7 +69,6 @@ class MonoCalibrator(object):
                     self.face.w_iris = median(w_irises)
                     print(f'focal length: {median(f_lengths)}')
                     print(f'iris diameter: {median(w_irises)}')
-                    print(f'iris diameter from kpts: {median(w_irises2)}')
                     cam.release()
                     cv2.destroyAllWindows()
                     break
@@ -88,15 +83,12 @@ class MonoCalibrator(object):
             output.append(True)
             # a tuple (left eye, right eye)
             face.xvals = self.xvals(face, detector)
+            # returns median pixel width of iris
             diameter = self.get_iris_diameter()
-            # returns median pixel width of corneas
-            diameter2 = self.get_iris_diameter_from_pts()
-            # transforms to mm
-            diameter2 = self.get_w_iris2(diameter2)
+            # transforms to real width and updates face mesh
             self.update_iris_width()
             output.append(self.get_f_length(diameter))
             output.append(self.face.w_iris)
-            output.append(diameter2)
             return output
         else:
             output.append(False)
@@ -135,9 +127,6 @@ class MonoCalibrator(object):
             measurements.append(diameter2)
         # returns median of the 4 diameters
         return median(measurements)
-
-    def get_w_iris2(self, diameter):
-        return (diameter * self.face.w_card) / self.face.w_pix
 
     def get_w_iris(self):
         '''
