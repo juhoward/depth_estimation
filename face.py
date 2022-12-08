@@ -1,4 +1,5 @@
 from math import sqrt, dist
+from statistics import median
 import numpy as np
 
 class FaceDet(object):
@@ -12,24 +13,20 @@ class FaceDet(object):
     Right now, f is calculated using the endpoints of a credit card (85.6mm width)
     held 20 (in.) from the webcam.
     '''
-    def __init__(self, d_2_obj, points):
+    def __init__(self):
         # credit card width (mm)
         self.w_card = 85.6
         # mean human iris diameter (mm)
         self.w_iris = 11.7
-        # first, calculate focal length
-        # euclidean distance between pts
-        self.w_pix = dist(points[:2],  points[2:])
-        # converts an initial distance in inches to mm
-        self.d_2_obj = self.in_to_mm(d_2_obj)
-        # computes focal length of camera using credit card
-        self.f = self.f_length()
-        # focal length using assumed iris diameter
-        self.f_iris = 0
+        # iris data
         self.l_iris = {'center': None, 'radius': None}
         self.r_iris = {'center': None, 'radius': None}
+        self.i_diameter = 0
         # mediapipe face mesh
         self.mesh = None
+        # mesh indices for iris points
+        self.LEFT_IRIS = [474, 475, 476, 477]
+        self.RIGHT_IRIS = [469, 470, 471, 472]
         # mediapipe head pts
         self.head_pts = None
         # head width (mm) based on iris diameter (mm)
@@ -40,10 +37,10 @@ class FaceDet(object):
         self.head_measurements = []
         # subject-to-camera distance using credit card(in)
         self.s2c_d = 0
+        self.s2c_ds = []
         # subject-to-camera distance using f_iris (in)
         self.s2c_d_i = 0
-        # s2c (cm)
-        self.s2c_ds = []
+
         # grouund truth s2c distances (stereo-based)
         self.gt_s2c = 0
         self.gt_s2cs = []
@@ -58,33 +55,31 @@ class FaceDet(object):
         self.error = 0
         self.errors = []
 
-    def f_length(self, card=True):
-        ''' 
-        returns the focal length based on triangle similarity.
-        d_2_obj : known distance to the object
-        w_card : known width of object in mm
-        w_pix : distance in pixels
-        TODO: test change in w_card to iris diameter
-        '''
-        if card == True:
-            return (self.d_2_obj * self.w_pix) / self.w_card
-        else:
-            return (self.d_2_obj * self.w_pix) / self.w_iris
+    # def f_length(self, card=True):
+    #     ''' 
+    #     returns the focal length based on triangle similarity.
+    #     d_2_obj : known distance to the object
+    #     w_card : known width of object in mm
+    #     w_pix : distance in pixels
+    #     TODO: test change in w_card to iris diameter
+    #     '''
+    #     if card == True:
+    #         return (self.d_2_obj * self.w_pix) / self.w_card
+    #     else:
+    #         return (self.d_2_obj * self.w_pix) / self.w_iris
 
-    def s2c_dist(self, w_object, w_pix, inches=True):
+    def s2c_dist(self, f, w_object, w_pix, inches=True):
         '''
         returns the subject-to-camera distance in mm using triangle similarity.
-        f : known focal length in mm
+        f : focal length in pixels
         w_object : known width of object in mm
-        w_pix : distance in pixels
+        w_pix : object width in pixels
         '''
-        # using credit card focal length
-        s2c_d = (self.f * w_object) / w_pix
-        # using iris focal length
-        s2c_d_i = (self.f_iris * w_object) / w_pix
+        # subject to camera distaince (mm)
+        s2c_d = (f * w_object) / w_pix
+
         # transform mm to cm
         s2c_d /= 10
-        s2c_d_i /= 10
         # log metric distance (cm) for parameter estimation
         self.s2c_ds.append(s2c_d)
         if inches == True:
@@ -98,22 +93,66 @@ class FaceDet(object):
         self.s2c_d = s2c_d
         self.s2c_d_i = s2c_d_i
 
+    def get_iris_diameter(self):
+        '''
+        returns the median iris diameter (pixels) using the 8 iris keypoints
+        in the face mesh.
+        TODO: merge mesh indices from detector into face object to centralize face
+        related data.
+        '''
+        # 4 iris points per eye
+        kpts = [self.mesh[self.LEFT_IRIS],
+                self.mesh[self.RIGHT_IRIS]]
+        measurements = []
+        for pts in kpts:
+            # 2 euclidean distances per eye
+            diameter1 = dist(pts[0], pts[2])
+            diameter2 = dist(pts[1], pts[3])
+            measurements.append(diameter1)
+            measurements.append(diameter2)
+        # returns median of the 4 diameters
+        self.i_diameter = median(measurements)
+        return self.i_diameter
+
+    def get_w_iris(self, w_card, card_w_pix, card=True):
+        '''
+        uses width of the credit card to estimate the corneal diameter
+        of detected irises.
+        assumes that face and card were coplanar when detected.
+        See calibrator object for self.d_2_obj value
+        
+        w_card: width of credit card (mm)
+        card_w_pix: pixel width of credit card
+        dmtr: pixel width of iris
+
+        TODO: check this for accuracy
+        '''
+        # return pixel width of iris
+        dmtr = self.get_iris_diameter()
+        # return real iris diameter
+        return (dmtr * w_card) / card_w_pix
+    
+    def update_iris_width(self, w_card, card_w_pix):
+        '''
+        changes face object's iris diameter (mm)
+        '''
+        self.w_iris = self.get_w_iris(w_card, card_w_pix)
+
     def get_headw(self, p1, p2, logging=True):
         '''
-        takes cheek points from facemesh &
+        takes cheekbone points from facemesh &
         returns the width (mm) of the head based on the iris detection.
         appends the head width in a list for later use. 
+        p1 & p2 are tuples (x, y) representing detected head points.
         '''
-        self.head_pts = (p1, p2)
         # head width in pixels
-        self.head_pixw = dist((p1[0], p1[1]), (p2[0], p2[1]))
+        self.head_pixw = dist(p1, p2)
         # horizontal distance in mm/pixel units : iris plane
-        if self.l_iris['radius'] is not None:
-            self.head_w = (self.head_pixw * self.w_iris) / (self.l_iris['radius'] * 2)
+        if self.i_diameter is not None:
+            head_w = (self.head_pixw * self.w_iris) / self.i_diameter
             if logging:
-                self.head_measurements.append(self.head_w)
-        else:
-            self.head_w = 0
+                self.head_measurements.append(head_w)
+                self.head_w = median(self.head_measurements)
 
     def get_depth(self, img):
         '''
@@ -193,7 +232,7 @@ class FaceDet(object):
 
     def mae(self, feet=False):
         '''
-        returns mean absolute error of converted abs depthHi and s2c distances
+        returns mean absolute error of converted abs depth and s2c distances
         '''
         if feet:
             errors = list(map(lambda x: abs(self.cm_to_ft(x[0]) - x[1]), zip(self.s2c_ds, self.abs_depths)))

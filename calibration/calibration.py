@@ -126,6 +126,7 @@ class Calibrator(object):
         # original color frames
         rgb_frms = {name:None for name in self.cameras.keys()}
         cnt = 0
+        print('press and hold "r" to capture stereo calibration images.')
         while True:
             for name, cam in self.cameras.items():
                 status, rgb_frms[name] = cam.read()

@@ -17,14 +17,14 @@ class Results(object):
         metric_name = method_name + '_rmse'
         errors = list(map(lambda x: (x[0] - x[1])**2, zip(yhat, y)))
         error = sqrt(mean(errors))
-        print(f'{method_name} RMSE - {error}')
+        # print(f'{method_name} RMSE - {error}')
         self.results[metric_name] = error
 
     def mae(self, yhat, y, method_name):
         metric_name = method_name + '_mae'
         errors = list(map(lambda x: abs(x[0] - x[1]), zip(yhat, y)))
         error = mean(errors)
-        print(f'{method_name} MAE - {error}')
+        # print(f'{method_name} MAE - {error}')
         self.results[metric_name] = error
     
     def report(self):
