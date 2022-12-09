@@ -10,7 +10,9 @@ class res_dict(dict):
 
 class Results(object):
     def __init__(self) -> None:
+        # holds a running median error
         self.results = res_dict()
+        # holds instance errors
         self.history = res_dict()
 
     def rmse(self, yhat, y, method_name):

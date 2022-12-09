@@ -21,6 +21,7 @@ class Calibrator(object):
             cam_names = list(camera_ids.keys())
             cam_names = [''.join(x.split(' ')).lower() for x in cam_names]
         self.cam_nms = cam_names
+        self.f_stereo = 0
 
 
     def get_camera_params(self, img_dir, display=False):
@@ -281,7 +282,8 @@ class Calibrator(object):
                     fy = self.stereo_params[cam]['intrinsic'][1][1]
                     f_xs += fx
                     f_ys += fy
-            return (f_xs + f_ys) // 4
+            self.f_stereo = (f_xs + f_ys) / 4
+            return (f_xs + f_ys) / 4
         else:
             print('Cameras not calibrated!')
             

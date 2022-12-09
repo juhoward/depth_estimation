@@ -12,14 +12,32 @@ from detectors import PersonDetector
 from mono_calibrate import MonoCalibrator
 from utils import Results
 
+from time import process_time
+
 class Stereo_VidStream(object):
     '''
-    
+    TODO
+    include a means to better synchronize the firing of both cameras
+    currently, the time between camera fires is not measured,
+    it is assumed that synchronization isleading to greater disparities and inaccurate gt distances.
+    measure time between camera fires and compare to new test code.
+    test this:
+        vidStreamL = cv2.VideoCapture(0)
+        vidStreamR = cv2.VideoCapture(2)
+
+        for i in range(10):
+            vidStreamL.grab()
+            vidStreamR.grab()
+        _, imgL = vidStreamL.retrieve()
+        _, imgR = vidStreamR.retrieve()
+
+
     '''
     def __init__(self,
                  camera_ids:dict, 
                  stereo_calibrator,
-                 mono_calibrator,
+                 f_lengths,
+                 methods,
                  faceL,
                  faceR,
                  depth_estimator,
@@ -32,16 +50,19 @@ class Stereo_VidStream(object):
         self.personR= PersonDetector(self.faceR)
         self.depth_estimator = depth_estimator
         self.stereo_calibrator = stereo_calibrator
-        self.monocal = mono_calibrator
+        self.f_lengths = f_lengths
+        self.methods = methods
         self.resultsL = Results()
         self.resultsR = Results()
         self.gt = Results()
         self.record = record
         self.cameras = {}
         self.writers = {}
+        self.time_logs = {}
         self.fourcc = cv2.VideoWriter_fourcc(*'mp4v')
         for name, id in camera_ids.items():
             self.cameras[name] = cv2.VideoCapture(id)
+            self.time_logs[name] = 0
             w = int(self.cameras[name].get(3))
             h = int(self.cameras[name].get(4))
             for detector in [self.personL, self.personR]:
@@ -57,13 +78,16 @@ class Stereo_VidStream(object):
         cams = list(frames.keys())
         self.cnt = 0
         while True:
+            # capture frames from both cameras to maintain better synchronization
             for name, cam in self.cameras.items():
                 ok, frame = cam.read()
                 if ok:
                     frames[name] = frame
+                    self.time_logs[name] = process_time()
                     self.cnt +=1
                     if self.record:
                         self.writers[name].write(frame)
+            # when two frames are captured, recitfy them, detect objects, can get distances
             if self.cnt % 2 == 0:
                 rectL, rectR = self.stereo_calibrator.stereo_rectify(frames[cams[0]], frames[cams[1]], saved_params=True)
                 if display == True:
@@ -72,19 +96,19 @@ class Stereo_VidStream(object):
                 # iris and body detection
                 rect_frames = [rectL, rectR]
                 self.detect(rect_frames)
-
+            # escape sequence
             if cv2.waitKey(1) & 0xff == ord('q'):
-                logs = [self.gt, self.resultsL, self.resultsR]
-                methods = ['gt', 'triangle', 'triangle_f_iris', 'neural_depth']
                 cam.release()
                 if self.record:
                     self.writers[name].release()
+                print(f'\nTime between camera fires (single sample): {self.time_logs[cams[1]] - self.time_logs[cams[0]]} (s)')
+                # record ground truth observations
+                self.gt.write_csv('gt', 'gt')
+                # record camera observations
+                logs = [self.resultsL, self.resultsR]
                 for idx, name in enumerate(self.cameras):
-                    for method in methods:
-                        if method == 'gt':
-                            logs[0].write_csv('gt', 'gt')
-                        else:
-                            logs[idx + 1].write_csv(name, method)
+                    for method in self.methods:
+                        logs[idx].write_csv(name, method)
                 break
 
     def visualize_disparity(self, disparity_SGBM):
@@ -114,10 +138,15 @@ class Stereo_VidStream(object):
     def detect(self, frames):
         faces = [self.faceL, self.faceR]
         detectors = [self.personL, self.personR]
-        f_lengths = [self.monocal.f_monocal, self.monocal.f_card, self.monocal.f_iris]
-        for frm, face, detector in zip(frames, faces, detectors):
+        logs = [self.resultsL, self.resultsR]
+        sides = ['left', 'right']
+
+        for frm, face, detector, log, side in zip(frames, faces, detectors, logs, sides):
+            # clear face mesh
             face.mesh = None
+            # populate face object with keypoints
             detector.findIris(frm)
+
             # TODO: maybe put depth back in to continue testing it against other methods.
             # depth_frame = self.depth_estimator.predict(frm)
             # TODO: find a linear transformation that 
@@ -211,19 +240,22 @@ class Stereo_VidStream(object):
                     message = 'Body not detected.'
                     # depth_frame = self.to_video_frame(depth_frame)
                     self.write_messages([message], frm)
-            # self.write_output(depth_frame)
-
-        for i,j in zip(frames[0].shape, frames[1].shape):
-            if i == j:
+            # update logs
+            # print(f'updating {side} logs')
+            try:
+                for dist, method in zip(s2c_dists, self.methods):
+                    log.update(dist, method)
+            except UnboundLocalError:
                 continue
-            else:
-                print("Image shape mismatch...")
+            # self.write_output(depth_frame)
         # report ground truth distance based on detected keypoints
-        dist = self.get_gt_distance(faces)
+        gt_dist = self.get_gt_distance(faces)
+        # gt_dist will be nono when point correspondence isn't achieved
+        self.gt.update(gt_dist, 'gt')
 
-        if dist is not None:
-            message = f'Distance (in): {round(float(dist), 2)}'
-            self.update_logs(dist)
+        if gt_dist is not None:
+            message = f'Distance (in): {round(float(gt_dist), 2)}'
+            # self.update_logs(s2c_dists, self.methods)
         else:
             message = 'No point correspondence.'
         combo = np.hstack((frames[0], frames[1]))
@@ -232,22 +264,22 @@ class Stereo_VidStream(object):
                     cv2.FONT_HERSHEY_SIMPLEX, 1, (0,255,0), 2, cv2.LINE_AA)
         cv2.imshow('Detections', combo)
     
-    def update_logs(self, dist):
-        faces = [self.faceL, self.faceR]
-        logs = [self.resultsL, self.resultsR]
-        # record ground truth distance
-        self.gt.update(dist, 'gt')
-        for face, log in zip(faces, logs):
-            # record relative inverse depth
-            log.update(face.ri_depth, 'neural_depth')
-            # record triangulation based subject to camera distance
-            log.update(face.s2c_d, 'triangle')
-            # triangulation based using focal length from iris assumption
-            log.update(face.s2c_d_i, 'triangle_f_iris')
-            log.rmse(log.history['triangle'], self.gt.history['gt'], 'triangle')
-            log.mae(log.history['triangle'], self.gt.history['gt'], 'triangle')
-            log.rmse(log.history['neural_depth'], self.gt.history['gt'], 'neural_depth')
-            log.mae(log.history['neural_depth'], self.gt.history['gt'], 'neural_depth')
+    def update_log(self, dists:list, methods:list):
+        '''
+        dists : a list of subject to camera distances
+        methods : a list of names to associate with distances
+        
+        adds distance values and calculates errors for each time step.
+        TODO
+        add relative inverse depth back into log updates.
+        '''
+        # record ground truth distance and remove it from lists
+        print(f'dists length: {len(dists[:-2])}\tmethods length: {len(methods[:-2])}')
+        # for dist, method in zip(dists[:-2], methods[:-2]):          
+            # log.rmse(log.history['triangle'], self.gt.history['gt'], 'triangle')
+            # log.mae(log.history['triangle'], self.gt.history['gt'], 'triangle')
+            # log.rmse(log.history['neural_depth'], self.gt.history['gt'], 'neural_depth')
+            # log.mae(log.history['neural_depth'], self.gt.history['gt'], 'neural_depth')
             # print(f"gt: {median(self.gt.history['gt'])}\ntriangle:{median(log.history['triangle'])}\nneural depth: {median(log.history['neural_depth'])}")
             # print(f"\nTriangle\nRMSE: {log.results['triangle_rmse']}\nMAE:{log.results['triangle_mae']}")
             # print(f"\nNeural Depth\nRMSE: {log.results['neural_depth_rmse']}\nMAE:{log.results['neural_depth_mae']}")
@@ -278,8 +310,8 @@ class Stereo_VidStream(object):
                 right_iR = right.xvals[1]
                 iL = zip(left_iL, right_iL)
                 iR = zip(left_iR, right_iR)
-                dispL = [l - r for l,r in iL]
-                dispR = [l - r for l,r in iR]
+                dispL = [abs(l - r)for l,r in iL]
+                dispR = [abs(l - r) for l,r in iR]
                 medL = median(dispL)
                 medR = median(dispR)
                 disparity = (medL + medR) / 2
@@ -293,7 +325,7 @@ class Stereo_VidStream(object):
                     vals = zip(left.xvals, right.xvals)
                     disp = [abs(l - r) for l,r in vals]
                     disparity = median(disp)
-                    print(f'body disparity: {disparity}')
+                    # print(f'body disparity: {disparity}')
                     return ((f * b) / disparity) / 2.54
                 else:
                     print('No Point correspondence.')
@@ -384,6 +416,10 @@ if __name__ == '__main__':
     ################################################################################################
     # get rid of iris calculation for now
     monocal.f_iris = 561.64
+    # focal length estimation method names for reporting
+    methods = ['f_monocal', 'f_card', 'f_iris']
+    # focal length estimates from the monocular calibration step
+    f_lengths = [monocal.f_monocal, monocal.f_card, monocal.f_iris]
     ################################################################################################
     # midas
     estimator = DepthEstimator(model_type)
@@ -395,7 +431,8 @@ if __name__ == '__main__':
         # run calibration.py first to save camera parameters
         # TODO make this work.
         stereo_calibrator.get_rectification_params(saved_params=True)
-        streamer = Stereo_VidStream(cameras, stereo_calibrator, monocal, faceL, faceR, estimator)
+        stereo_calibrator.get_calibrated_f()
+        streamer = Stereo_VidStream(cameras, stereo_calibrator, f_lengths, methods, faceL, faceR, estimator)
         streamer.stereo_stream(disp, display=True)
     else:
         img_dir = '/home/digitalopt/proj/depth_estimation/calibration/stereo_imgs/'
@@ -405,5 +442,5 @@ if __name__ == '__main__':
         stereo_calibrator.get_calibrated_f()
         print('Stereo Focal Length Estimate:')
         print(f'f_stereo: {stereo_calibrator.f_stereo}')
-        streamer = Stereo_VidStream(cameras, stereo_calibrator, monocal, faceL, faceR, estimator)
+        streamer = Stereo_VidStream(cameras, stereo_calibrator, f_lengths, methods, faceL, faceR, estimator)
         streamer.stereo_stream(disp)

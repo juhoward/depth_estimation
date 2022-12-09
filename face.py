@@ -8,10 +8,13 @@ class FaceDet(object):
     --mesh
     --head measurements
     --distance calculations
-    --camera parameters
-    Must be initialized by calculating the focal length (f) of the camera.
-    Right now, f is calculated using the endpoints of a credit card (85.6mm width)
-    held 20 (in.) from the webcam.
+
+    Uses the assumed iris diameter of 11.7mm unless updated.
+    TODO: 
+    merge mesh indices from detector into face object to centralize face
+    related data.
+    transfer distance estimation to stereo vid stream script
+    transfer error and history storage to results objects
     '''
     def __init__(self):
         # credit card width (mm)
@@ -55,19 +58,6 @@ class FaceDet(object):
         self.error = 0
         self.errors = []
 
-    # def f_length(self, card=True):
-    #     ''' 
-    #     returns the focal length based on triangle similarity.
-    #     d_2_obj : known distance to the object
-    #     w_card : known width of object in mm
-    #     w_pix : distance in pixels
-    #     TODO: test change in w_card to iris diameter
-    #     '''
-    #     if card == True:
-    #         return (self.d_2_obj * self.w_pix) / self.w_card
-    #     else:
-    #         return (self.d_2_obj * self.w_pix) / self.w_iris
-
     def s2c_dist(self, f, w_object, w_pix, inches=True):
         '''
         returns the subject-to-camera distance in mm using triangle similarity.
@@ -97,8 +87,6 @@ class FaceDet(object):
         '''
         returns the median iris diameter (pixels) using the 8 iris keypoints
         in the face mesh.
-        TODO: merge mesh indices from detector into face object to centralize face
-        related data.
         '''
         # 4 iris points per eye
         kpts = [self.mesh[self.LEFT_IRIS],

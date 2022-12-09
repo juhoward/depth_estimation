@@ -88,6 +88,8 @@ class MonoCalibrator(object):
             if cv2.waitKey(1) & 0xff == ord('q'):
                 cam.release()
                 cv2.destroyAllWindows()
+                print('Focal Lengths:')
+                print(f'f_card: {self.f_card}\tf_iris: {self.f_iris}\tf_monocal: {self.f_monocal}')
                 break
             elif cv2.waitKey(2) & 0xff == ord('c'):       
                 # collect new calibration images
@@ -132,11 +134,6 @@ class MonoCalibrator(object):
                         self.cameras[name].release()
                     cv2.destroyAllWindows()
                     return self.face
-            elif cv2.waitKey(4) & 0xff == ord('n'):
-                self.f_iris = 561.64
-        print('Focal Lengths:')
-        print(f'f_card: {self.f_card}\tf_iris: {self.f_iris}\tf_monocal: {self.f_monocal}')
-
 
     def detect(self, face, detector, frame):
         face.mesh = None        
