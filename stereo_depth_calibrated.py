@@ -443,4 +443,4 @@ if __name__ == '__main__':
         print('Stereo Focal Length Estimate:')
         print(f'f_stereo: {stereo_calibrator.f_stereo}')
         streamer = Stereo_VidStream(cameras, stereo_calibrator, f_lengths, methods, faceL, faceR, estimator)
-        streamer.stereo_stream(disp)
+        streamer.stereo_stream(disp)                

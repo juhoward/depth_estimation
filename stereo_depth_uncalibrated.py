@@ -62,7 +62,7 @@ class Stereo_VidStream(object):
                 if ok:
                     cnt += 1
                     # cv2.imshow(name, frame)
-                    img = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+                    img = cv2.cvtColor(frame, cv2.COLOR_RGB2GRAY)
                     gray[name] = img
                     # returns tuple (keypoints, descriptors)
                     features = detector.detectAndCompute(img, None)

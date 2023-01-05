@@ -28,7 +28,7 @@ class ShapeDetector:
 		# 	# equal to one, otherwise, the shape is a rectangle
 		# 	shape = "square" if ar >= 0.95 and ar <= 1.05 else "rectangle"
 
-		elif len(approx) > 3 and len(approx) < 9: #9
+		elif len(approx) > 3:# and len(approx) < 9: #9
 			shape = "card"
 		# otherwise, we assume the shape is a circle
 		else:
