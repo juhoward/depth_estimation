@@ -7,8 +7,14 @@ from depth_midas import DepthEstimator
 from glob import glob
 
 def showInMovedWindow(winname, img, x, y):
-    cv.namedWindow(winname, cv.WINDOW_AUTOSIZE)        # Create a named window
-    cv.moveWindow(winname, x, y)   # Move it to (x,y)
+    '''
+    creates a named window and moves it to a location.
+    the window that is shown cannot be moved.
+    '''
+    # Create a named window
+    cv.namedWindow(winname, cv.WINDOW_AUTOSIZE)        
+    # Move it to (x,y)
+    cv.moveWindow(winname, x, y)  
     cv.imshow(winname,img)
 
 def rotate(origin, point, angle):
@@ -24,16 +30,7 @@ def rotate(origin, point, angle):
     qy = oy + sin(angle) * (px - ox) + cos(angle) * (py - oy)
     return qx, qy
 
-def to_video_frame(img):
-    ''' 
-    transforms midas depth frame to a video frame.
-    '''
-    output = img.astype(np.uint8)
-    # change contrast
-    output *= 5
-    # brightness
-    output += 10
-    return cv.merge([output,output,output])
+
 
 def get_threshold_vals(img, sigma = .33):
     '''
@@ -43,39 +40,6 @@ def get_threshold_vals(img, sigma = .33):
     lower = int(max(0, (1 - sigma) * med))
     upper = int(min(255, (1 - sigma) * med))
     return lower, upper
-
-def farthest(lines, horizontal=True):
-    '''
-    given a list of candidate lines, uses the absolute difference in the x or y dim
-    and the points representing the farthest lines.
-    Points are intended to set cropping boundaries of the img_obj image
-    '''
-    max_dist = 0
-    max_pts = []
-    for i in lines:
-        x1 = i[0]
-        y1 = i[1]
-        for j in lines:
-            x2 = j[0]
-            y2 = j[1]
-            if horizontal:
-                d = abs(y2 - y1)
-            else:
-                d = abs(x2 - x1)
-            if d > max_dist:
-                max_dist = d
-                pt1 = tuple(map(lambda x: int(x), (x1,y1)))
-                pt2 = tuple(map(lambda x: int(x), (x2,y2)))
-                max_pts = [pt1, pt2]
-    # sorting least to greatest to make cropping easier
-    if horizontal:
-        # sort by y values if horizontal
-        max_pts.sort(key=lambda x: x[1])
-        return max_pts
-    else:
-        # sort by x values if vertical
-        max_pts.sort(key=lambda x: x[0])
-        return max_pts
 
 
 class CardDetector(object):
@@ -99,14 +63,9 @@ class CardDetector(object):
         # credit card's aspect ratio (height / width)
         self.aspect_ratio = 53.98 / 85.6
 
-    def stream(self, estimator):
-        # self.cameras = {}
-        # for idx, (name, id) in enumerate(camera_ids.items()):
-        #     if idx == 0:
-        #         self.cameras[name] = cv.VideoCapture(id)
-                # turns off autofocus
-                # self.cameras[name].set(cv.CAP_PROP_AUTOFOCUS, 0)
+    def stream(self, estimator, reidentify=False):
         camera = cv.VideoCapture(0)
+        # turns on autofocus
         camera.set(cv.CAP_PROP_AUTOFOCUS, 1)
         print('Press "c" to when example object is within the green box')
         print('Press "q" to exit.')
@@ -121,12 +80,13 @@ class CardDetector(object):
             # copy frame so you don't modify the original capture
             highlight = cv.rectangle(frame.copy(), (int(w*.05), int(h*.1)), (int(w * .95), int(h*.9)), (0,255,0), 2)
             cv.imshow('Credit Card Capture', highlight)
+            # make the window pop up in specific location on screen
             # showInMovedWindow('Credit Card Capture', highlight, 1400, 200)
             if cv.waitKey(1) & 0xff == ord('q'):
                 break
             elif cv.waitKey(1) & 0xff == ord('c'):
                 depth_frame = estimator.predict(frame)
-                depth_frame = to_video_frame(depth_frame)
+                depth_frame = self.to_video_frame(depth_frame)
                 cv.imshow('Depth', depth_frame)
                 boundaries = self.detect_lines(depth_frame)
                 if boundaries:
@@ -140,12 +100,17 @@ class CardDetector(object):
                     print(f'{len(self.keypoints_obj)} features stored.')
                     print('Press "r" to re-identify card in scene.')
             elif cv.waitKey(1) & 0xff == ord('r'):
-                print('Re-ID frame captured.')
+                if reidentify == False:
+                    reidentify = True
+                    print('Re-ID engaged.')
+                else:
+                    reidentify = False
+            if reidentify == True:
                 frame = cv.cvtColor(frame, cv.COLOR_BGR2GRAY)
-                scene_corners = self.detect(frame)
+                scene_corners = self.reidentify(frame)
                 if scene_corners is not None:
                     cnt += 1
-                    card_finder.show_match(scene_corners, frame, cnt)
+                    self.show_match(scene_corners, frame, cnt)
 
         camera.release()
         cv.destroyAllWindows()
@@ -153,7 +118,7 @@ class CardDetector(object):
     def get_obj_features(self, img_obj):
         self.keypoints_obj, self.descriptors_obj = self.detector.detectAndCompute(img_obj, None)
 
-    def detect(self, img_scene, min_matches=5):
+    def reidentify(self, img_scene, min_matches=8):
         keypoints_scene, descriptors_scene = self.detector.detectAndCompute(img_scene, None)
         self.keypoints_scene = keypoints_scene
         #-- Step 2: Matching descriptor vectors with a FLANN based matcher
@@ -175,24 +140,31 @@ class CardDetector(object):
                 obj[i,1] = self.keypoints_obj[self.good_matches[i].queryIdx].pt[1]
                 scene[i,0] = keypoints_scene[self.good_matches[i].trainIdx].pt[0]
                 scene[i,1] = keypoints_scene[self.good_matches[i].trainIdx].pt[1]
-            H, _ =  cv.findHomography(obj, scene, cv.RANSAC)
-            #-- Get the corners from the image_1 ( the object to be "detected" )
-            obj_corners = np.empty((4,1,2), dtype=np.float32)
-            obj_corners[0,0,0] = 0
-            obj_corners[0,0,1] = 0
-            obj_corners[1,0,0] = self.img_obj.shape[1]
-            obj_corners[1,0,1] = 0
-            obj_corners[2,0,0] = self.img_obj.shape[1]
-            obj_corners[2,0,1] = self.img_obj.shape[0]
-            obj_corners[3,0,0] = 0
-            obj_corners[3,0,1] = self.img_obj.shape[0]
-            # localize object in scene
-            scene_corners = cv.perspectiveTransform(obj_corners, H)
-            return scene_corners
-        else:
-            print('Re-ID failed, press "r" to try again')
+            H, _ =  cv.findHomography(obj, scene, cv.RANSAC, 2.0)
+            if H is not None:
+                #-- Get the corners from the image_1 ( the object to be "detected" )
+                obj_corners = np.empty((4,1,2), dtype=np.float32)
+                obj_corners[0,0,0] = 0
+                obj_corners[0,0,1] = 0
+                obj_corners[1,0,0] = self.img_obj.shape[1]
+                obj_corners[1,0,1] = 0
+                obj_corners[2,0,0] = self.img_obj.shape[1]
+                obj_corners[2,0,1] = self.img_obj.shape[0]
+                obj_corners[3,0,0] = 0
+                obj_corners[3,0,1] = self.img_obj.shape[0]
+                try:
+                    # localize object in scene
+                    scene_corners = cv.perspectiveTransform(obj_corners, H)
+                except:
+                    print(f"possible homography failure. H type: {type(H)} \tsize: {H.size}\tH: {H}\tgood match count: {len(self.good_matches)}")
+                return scene_corners
 
     def detect_lines(self, img, threshold=10):
+        '''
+        uses the opencv native line segment detector to find candidate lines with which to crop the img_obj.
+        img : a 3-channel image that is assumed to be the midas depth output
+        TODO: test foreground background subtraction mask instead of MiDaS outputs.
+        '''
         cnt = 0
         # Create default parametrization LSD
         lsd = cv.createLineSegmentDetector(0)
@@ -202,6 +174,8 @@ class CardDetector(object):
         lines = lsd.detect(img[:,:,0])[0] 
         # remove a dimension
         lines = lines[:,0]
+        # restrict domain of potential line points to those within the domain of the image.
+        # negative values or values beyond the limits of the img are sometimes returned.
         lines = np.clip(lines, 0, img.shape[1])
 
         # Filter out the lines whose length is lower than the threshold
@@ -227,19 +201,19 @@ class CardDetector(object):
         # if all 4 edges are detected
         if len(vlines) >= 2 and len(hlines) >= 2:
             # find the most distant horizontal points
-            hpts = farthest(hlines, horizontal=True)
+            hpts = self.farthest(hlines, horizontal=True)
             # find the most distant vertical points
-            vpts = farthest(vlines, horizontal=False)
+            vpts = self.farthest(vlines, horizontal=False)
             # returns y1, y2, x1, x2 for cropping
             return hpts[0][1], hpts[1][1], vpts[0][0], vpts[1][0]
         # if vertical lines are detected
         elif len(vlines) >= 2:
-            vpts = farthest(vlines, horizontal=False)
+            vpts = self.farthest(vlines, horizontal=False)
             # returns x1, x2 for cropping
             return None, None, vpts[0][0], vpts[1][0]
         # if horizontal lines are detected
         elif len(hlines) >= 2:
-            hpts = farthest(hlines, horizontal=True)
+            hpts = self.farthest(hlines, horizontal=True)
             # returns y1, y2 for cropping
             return hpts[0][1], hpts[1][1], None, None
         else:
@@ -250,6 +224,39 @@ class CardDetector(object):
             cv.imwrite(f'./results/vertical_{cnt}.png',drawn_img)
             drawn_img = lsd.drawSegments(img.copy(), hlines)
             cv.imwrite(f'./results/horizontal_{cnt}.png',drawn_img)
+
+    def farthest(self, lines, horizontal=True):
+        '''
+        given a list of candidate lines, uses the absolute difference in the x or y dim
+        and the points representing the farthest lines.
+        Points are intended to set cropping boundaries of the img_obj image
+        '''
+        max_dist = 0
+        max_pts = []
+        for i in lines:
+            x1 = i[0]
+            y1 = i[1]
+            for j in lines:
+                x2 = j[0]
+                y2 = j[1]
+                if horizontal:
+                    d = abs(y2 - y1)
+                else:
+                    d = abs(x2 - x1)
+                if d > max_dist:
+                    max_dist = d
+                    pt1 = tuple(map(lambda x: int(x), (x1,y1)))
+                    pt2 = tuple(map(lambda x: int(x), (x2,y2)))
+                    max_pts = [pt1, pt2]
+        # sorting least to greatest to make cropping easier
+        if horizontal:
+            # sort by y values if horizontal
+            max_pts.sort(key=lambda x: x[1])
+            return max_pts
+        else:
+            # sort by x values if vertical
+            max_pts.sort(key=lambda x: x[0])
+            return max_pts
 
     def crop_img(self, boundaries, img_obj):
         '''
@@ -268,7 +275,25 @@ class CardDetector(object):
         cropped = cv.cvtColor(cropped, cv.COLOR_BGR2GRAY)
         self.img_obj = cropped
 
+    def to_video_frame(self, img):
+        ''' 
+        transforms midas depth frame to a video frame.
+        '''
+        output = img.astype(np.uint8)
+        # change contrast
+        output *= 5
+        # brightness
+        output += 10
+        return cv.merge([output,output,output])
+
     def show_match(self, scene_corners, img_scene, cnt):
+        '''
+        A visualization tool to show the localization of a credit card and matched pixels.
+        uses the corners from a projective transformation to localize the card in a given scene image.
+        Drawing matched points is completed by the drawMatches function, while the scene corners are used
+        to draw the localization lines.
+        A good localization is dependent on a high quality img_obj as a reference.
+        '''
         #-- Draw matches
         img_matches = np.empty((max(self.img_obj.shape[0], img_scene.shape[0]), self.img_obj.shape[1]+img_scene.shape[1], 3), dtype=np.uint8)
         cv.drawMatches(self.img_obj, self.keypoints_obj, img_scene, self.keypoints_scene, self.good_matches, img_matches, flags=cv.DrawMatchesFlags_NOT_DRAW_SINGLE_POINTS)
@@ -282,6 +307,7 @@ class CardDetector(object):
         cv.line(img_matches, (int(scene_corners[3,0,0] + self.img_obj.shape[1]), int(scene_corners[3,0,1])),\
             (int(scene_corners[0,0,0] + self.img_obj.shape[1]), int(scene_corners[0,0,1])), (0,255,0), 4)
         cv.imwrite(f'./results/Card_Detection_{cnt}.png', img_matches)
+        print(f'Capture saved: ./results/Card_Detection_{cnt}.png')
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Code for Feature Matching with FLANN')
@@ -306,6 +332,8 @@ if __name__ == "__main__":
         # load card detector
         card_finder = CardDetector('SIFT')
         card_finder.stream(estimator)
+    
+    ######################## bug related to number of channels
     else:
         print('reading saved test set images...')
         objects = sorted(glob(args.cards + '*.jpg'))
@@ -329,7 +357,7 @@ if __name__ == "__main__":
 
             # get depth estimate
             depth_frame = estimator.predict(img_obj_color)
-            depth_frame = to_video_frame(depth_frame)
+            depth_frame = card_finder.to_video_frame(depth_frame)
             # detect card boundaries
             boundaries = card_finder.detect_lines(depth_frame)
             if boundaries:
@@ -339,21 +367,21 @@ if __name__ == "__main__":
                 if boundaries[0] and boundaries[2] is not None:
                     cropped = img_obj[y1:y2, x1:x2]
                     card_finder.get_obj_features(cropped)
-                    scene_corners = card_finder.detect(img_scene)
+                    scene_corners = card_finder.reidentify(img_scene)
                     cnt += 1
                     card_finder.show_match(scene_corners, img_scene, cnt)
                 # only horizontal boundaries
                 elif boundaries[0] is not None:
                     cropped = img_obj[y1:y2, :]
                     card_finder.get_obj_features(cropped)
-                    scene_corners = card_finder.detect(img_scene)
+                    scene_corners = card_finder.reidentify(img_scene)
                     cnt += 1
                     card_finder.show_match(scene_corners, img_scene, cnt)
                 # only vertical boundaries
                 elif boundaries[2] is not None:
                     cropped = img_obj[:, x1:x2]
                     card_finder.get_obj_features(cropped)
-                    scene_corners = card_finder.detect(img_scene)
+                    scene_corners = card_finder.reidentify(img_scene)
                     cnt += 1
                     card_finder.show_match(scene_corners, img_scene, cnt)
             else:
