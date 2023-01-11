@@ -1,4 +1,4 @@
-import cv2
+import cv2 as cv
 import numpy as np
 import glob
 from statistics import median
@@ -22,8 +22,8 @@ class Stereo_VidStream(object):
     it is assumed that synchronization isleading to greater disparities and inaccurate gt distances.
     measure time between camera fires and compare to new test code.
     test this:
-        vidStreamL = cv2.VideoCapture(0)
-        vidStreamR = cv2.VideoCapture(2)
+        vidStreamL = cv.VideoCapture(0)
+        vidStreamR = cv.VideoCapture(2)
 
         for i in range(10):
             vidStreamL.grab()
@@ -59,9 +59,11 @@ class Stereo_VidStream(object):
         self.cameras = {}
         self.writers = {}
         self.time_logs = {}
-        self.fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+        self.fourcc = cv.VideoWriter_fourcc(*'mp4v')
         for name, id in camera_ids.items():
-            self.cameras[name] = cv2.VideoCapture(id)
+            self.cameras[name] = cv.VideoCapture(id)
+            # turns off autofocus
+            self.cameras[name].set(cv.CAP_PROP_AUTOFOCUS, 0)
             self.time_logs[name] = 0
             w = int(self.cameras[name].get(3))
             h = int(self.cameras[name].get(4))
@@ -70,7 +72,7 @@ class Stereo_VidStream(object):
                 detector.h = h
             if self.record:
                 fname = './' + name + '.mp4'
-                self.writers[name] = cv2.VideoWriter(fname, self.fourcc, 20, (w, h))
+                self.writers[name] = cv.VideoWriter(fname, self.fourcc, 20, (w, h))
 
     def stereo_stream(self, disp_mapper, display=False):
         print('press "q" to exit...')
@@ -97,7 +99,7 @@ class Stereo_VidStream(object):
                 rect_frames = [rectL, rectR]
                 self.detect(rect_frames)
             # escape sequence
-            if cv2.waitKey(1) & 0xff == ord('q'):
+            if cv.waitKey(1) & 0xff == ord('q'):
                 cam.release()
                 if self.record:
                     self.writers[name].release()
@@ -112,21 +114,21 @@ class Stereo_VidStream(object):
                 break
 
     def visualize_disparity(self, disparity_SGBM):
-        disp_img = cv2.normalize(disparity_SGBM, disparity_SGBM, alpha=255,
-                                        beta=0, norm_type=cv2.NORM_MINMAX)
+        disp_img = cv.normalize(disparity_SGBM, disparity_SGBM, alpha=255,
+                                        beta=0, norm_type=cv.NORM_MINMAX)
         disp_img = np.uint8(disp_img)
-        disp_img = cv2.applyColorMap(disp_img, cv2.COLORMAP_MAGMA)
-        cv2.imshow("Disparity Map", disp_img)
+        disp_img = cv.applyColorMap(disp_img, cv.COLORMAP_MAGMA)
+        cv.imshow("Disparity Map", disp_img)
 
     def get_depth(self, roi, disparity_SGBM, b=3.75*2.54, calibrated=True):
-        disp_img = cv2.normalize(disparity_SGBM, disparity_SGBM, alpha=255,
-                                        beta=0, norm_type=cv2.NORM_MINMAX)
+        disp_img = cv.normalize(disparity_SGBM, disparity_SGBM, alpha=255,
+                                        beta=0, norm_type=cv.NORM_MINMAX)
         disp_img = np.uint8(disp_img)
-        disp_img = cv2.applyColorMap(disp_img, cv2.COLORMAP_MAGMA)
+        disp_img = cv.applyColorMap(disp_img, cv.COLORMAP_MAGMA)
         x, y = roi[0]
         w, h = roi[1]
         region = disp_img[y:y+h, x:x+w]
-        cv2.imshow("ROI", region)
+        cv.imshow("ROI", region)
         roi_disparity = disparity_SGBM[y:y+h, x:x+h]
         median_disp = np.median(roi_disparity)
         if calibrated:
@@ -217,15 +219,15 @@ class Stereo_VidStream(object):
                     # face.rel2abs()
                     # don't log head width, won't be accurate w/o iris diameter
                     face.get_headw(head_pts[3], head_pts[4], logging=False)
-                    cv2.circle(frm, face.head_pts[3].astype(int), 1, (255,255,255), 2, cv2.LINE_AA)
-                    cv2.circle(frm, face.head_pts[4].astype(int), 1, (255,255,255), 2, cv2.LINE_AA)
+                    cv.circle(frm, face.head_pts[3].astype(int), 1, (255,255,255), 2, cv.LINE_AA)
+                    cv.circle(frm, face.head_pts[4].astype(int), 1, (255,255,255), 2, cv.LINE_AA)
                     median_head_w = median(face.head_measurements)
                     s2c_dists = list(map(lambda f: self.s2c_dist(f, median_head_w, face.head_pixw), f_lengths))
                     # convert from (cm) to (in)
                     s2c_dists = list(map(lambda x : x / 2.54, s2c_dists))
                     # write output to rgb frame
                     message = 'Face not detected. Using body pose estimates.'
-                    cv2.putText(frm, message, (70, 550), cv2.FONT_HERSHEY_SIMPLEX, 1, (255,0,0), 2, cv2.LINE_AA)
+                    cv.putText(frm, message, (70, 550), cv.FONT_HERSHEY_SIMPLEX, 1, (255,0,0), 2, cv.LINE_AA)
                     message2 = f"S2C Distances (in):"
                     message3 = f"- f_monocal: {round(s2c_dists[0],  2)}"
                     message4 = f"- f_card: {round(s2c_dists[1], 2)}"
@@ -260,9 +262,9 @@ class Stereo_VidStream(object):
             message = 'No point correspondence.'
         combo = np.hstack((frames[0], frames[1]))
         text_coords = (500, 400)
-        cv2.putText(combo, message, text_coords, 
-                    cv2.FONT_HERSHEY_SIMPLEX, 1, (0,255,0), 2, cv2.LINE_AA)
-        cv2.imshow('Detections', combo)
+        cv.putText(combo, message, text_coords, 
+                    cv.FONT_HERSHEY_SIMPLEX, 1, (0,255,0), 2, cv.LINE_AA)
+        cv.imshow('Detections', combo)
     
     def update_log(self, dists:list, methods:list):
         '''
@@ -363,8 +365,8 @@ class Stereo_VidStream(object):
 
     def write_messages(self, messages, img):
         for idx, m in enumerate(messages):
-            cv2.putText(img, m, (50, 50 + idx*50), 
-                cv2.FONT_HERSHEY_SIMPLEX, 1, (0,255,0), 2, cv2.LINE_AA)
+            cv.putText(img, m, (50, 50 + idx*50), 
+                cv.FONT_HERSHEY_SIMPLEX, 1, (0,255,0), 2, cv.LINE_AA)
 
     def to_video_frame(self, img):
         ''' 
@@ -375,11 +377,11 @@ class Stereo_VidStream(object):
         output *= 5
         # brightness
         output += 10
-        return cv2.merge([output,output,output])
+        return cv.merge([output,output,output])
 
     def side_by_side(self, img1, img2):
-        frame1 = cv2.resize(img1, (self.w//2, self.h//2))
-        frame2 = cv2.resize(img2, (self.w//2, self.h//2))
+        frame1 = cv.resize(img1, (self.w//2, self.h//2))
+        frame2 = cv.resize(img2, (self.w//2, self.h//2))
         return np.hstack((frame1, frame2))
     
     def write_output(self, depth_frame):
