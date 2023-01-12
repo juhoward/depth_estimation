@@ -3,7 +3,7 @@ import cv2 as cv
 import numpy as np
 import argparse
 from math import (sin, cos, dist)
-from depth_midas import DepthEstimator
+from .depth_midas import DepthEstimator
 from glob import glob
 
 def showInMovedWindow(winname, img, x, y):
@@ -64,6 +64,8 @@ class CardDetector(object):
         print(f'aspect ratio: {self.card_h / self.card_w}')
         # credit card in scene
         self.card_location = None
+        self.tp = 0
+        self.fp = 0
 
     def stream(self, estimator, reidentify=False):
         camera = cv.VideoCapture(0)
@@ -96,7 +98,7 @@ class CardDetector(object):
                     self.crop_img(boundaries, frame)
                     self.get_obj_features(self.img_obj)
                     cv.imshow('Cropped', self.img_obj)
-                    cv.waitKey(1000)
+                    cv.waitKey(3000)
                     cv.destroyWindow('Cropped')
                     cv.destroyWindow('Depth')
                     print(f'{len(self.keypoints_obj)} features stored.')
@@ -111,19 +113,24 @@ class CardDetector(object):
                 frame = cv.cvtColor(frame, cv.COLOR_BGR2GRAY)
                 scene_corners = self.reidentify(frame)
                 if scene_corners is not None:
-                    valid, distance = self.validate(scene_corners)
+                    valid, h, w = self.validate(scene_corners)
                     if valid == True:
                         cnt += 1
-                        self.show_match(scene_corners, frame, distance, cnt)
-
+                        self.show_match(scene_corners, frame, (h,w), cnt)
+        print(f'Precision: {self.get_precision()}')
         camera.release()
         cv.destroyAllWindows()
+
+    def get_precision(self):
+        return round((self.tp / (self.tp + self.fp)) * 100, 2)
 
     def validate(self, scene_corners, err_margin = .2):
         '''
         validates the re-id card's aspect ratio matches a real card's aspct ratio.
         scene corners: output of perspective transform, subpixel accuracy
         err_margin: the acceptable margin of error
+
+        returns a boolean and tuple of (h, w)
         '''
         tl = (scene_corners[0,0,0] + self.img_obj.shape[1], scene_corners[0,0,1])
         tr = (scene_corners[1,0,0] + self.img_obj.shape[1], scene_corners[1,0,1])
@@ -150,10 +157,12 @@ class CardDetector(object):
         scene_ratio = h / w
         # if difference is less than margin of erro, accept the re-id coordinates
         if abs(aspect_ratio - scene_ratio) < val:
-            return True, scene_ratio
+            self.tp += 1
+            return True, h, w
         else:
-            print(f'False\ndifference: {abs(aspect_ratio - scene_ratio)}\nval:{val}')
-            return False, scene_ratio
+            self.fp += 1
+            print(f'False Positive\ndifference: {abs(aspect_ratio - scene_ratio)}\nval:{val}')
+            return False, 0, 0
 
     def get_obj_features(self, img_obj):
         self.keypoints_obj, self.descriptors_obj = self.detector.detectAndCompute(img_obj, None)
@@ -347,28 +356,22 @@ class CardDetector(object):
         cv.line(img_matches, bl, br, (255,0,0), 4)
         cv.line(img_matches, tl, bl, (0,255,0), 4)
         cv.line(img_matches, tr, br, (0,255,0), 4)
-        # for subpixel accuracy, use scene_corners
-        h1 = dist(tl, bl)
-        h2 = dist(tr, br)
-        h = (h1 + h2) / 2
-        w1 = dist(tl, tr)
-        w2 = dist(bl, br)
-        w = (w1 + w2) / 2
-        cxt = (tl[0] + tr[0]) / 2
-        cxb = (bl[0] + br[0]) / 2
-        cx = int((cxt + cxb) / 2)
-        cyt = (tl[1] + tr[1]) / 2
-        cyb = (bl[1] + br[1]) / 2
-        cy = int((cyt + cyb) / 2)
+        cxt = (tl[0] + tr[0]) // 2
+        # cxb = (bl[0] + br[0]) // 2
+        # cx = int((cxt + cxb) / 2)
+        # cyt = (tl[1] + tr[1]) // 2
+        # cyb = (bl[1] + br[1]) // 2
+        # cy = int((cyt + cyb) / 2)
         cv.circle(img_matches, (tl[0], tl[1]),2,(255,0, 255), 2, cv.LINE_AA)
         cv.circle(img_matches, (tr[0], tr[1]),2,(255,0, 255), 2, cv.LINE_AA)
         cv.circle(img_matches, (bl[0], bl[1]),2,(255,0, 255), 2, cv.LINE_AA)
         cv.circle(img_matches, (br[0], br[1]),2,(255,0, 255), 2, cv.LINE_AA)
-        message = str(round(distance, 2))
-        message1 = str(round((h/w), 2))
-        cv.putText(img_matches, message, (cx,cy),
+        h_message = str(round(distance[0], 2))
+        w_message = str(round(distance[1], 2))
+        cv.putText(img_matches, h_message, (tl[0],(tl[1] + bl[1]) // 2),
                                 cv.FONT_HERSHEY_SIMPLEX, 1, (0,255,0), 1, cv.LINE_AA)
-        cv.putText(img_matches, message1, (cx,cy - 50),
+        cv.putText(img_matches, w_message, (cxt,tl[1]),
+
                                 cv.FONT_HERSHEY_SIMPLEX, 1, (0,255,0), 1, cv.LINE_AA)
         # for pt, m in zip([tl, tr, bl,br], ['tl', 'tr', 'bl', 'br']):
         #         message = m + ' ('+str(pt[0])+', '+str(pt[1])+')'
