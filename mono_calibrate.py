@@ -53,6 +53,10 @@ class MonoCalibrator(object):
         for idx, (name, id) in enumerate(camera_ids.items()):
             if idx == 0:
                 self.cameras[name] = cv.VideoCapture(id)
+                # turns on autofocus
+                self.cameras[name].set(cv.CAP_PROP_AUTOFOCUS, 1)
+                self.h = int(self.cameras[name].get(4))
+                self.w = int(self.cameras[name].get(3))
         # Vector for 3D points
         self.points3D = []
         # Vector for 2D points
@@ -66,7 +70,11 @@ class MonoCalibrator(object):
 
 
     def stream(self, card_detector, depth_estimator, from_saved=False):
-        autofocus = True   
+        '''
+        Takes user through 3-step procedure to measure a subject's iris, estimate
+        the camera's focal length, and identify and remove lense distortion.
+        User must have an ID card (credit card, medical ID, state ID)
+        '''
         f_lengths = []
         w_irises = []
         if from_saved:
@@ -75,17 +83,24 @@ class MonoCalibrator(object):
             img_reader = self.mono_calibration_data_reader('./calibration/mono_imgs/')
             self.find_corners(img_reader)
             camera_intrinsics = self.mono_calibrate()
+            self.camMat = camera_intrinsics[1]
+            self.dist = camera_intrinsics[2]
+            # remove distortion from frame
+            # distortion coefficients are at index 2
+            self.optimalMat, self.roi = cv.getOptimalNewCameraMatrix(camera_intrinsics[1], camera_intrinsics[2], (self.w,self.h), 1, (self.w,self.h))
             # get mean of focal lengths in x and y dimensions
             f = (camera_intrinsics[1][0][0] + camera_intrinsics[1][1][1]) / 2
             self.f_monocal = f
             print(f'Calibration complete. focal length: {self.f_monocal}')
             print('press and hold spacebar when 12 in. from camera to calibrate iris...')
             print('press "n" to end calibration...')
+
         else:
             print('Step 1, Capture ID card.')
             print('press and hold "i" when the ID card is near camera...')
         while True:
             for name, cam in self.cameras.items():
+
                 ok, frame = cam.read()
                 if not ok:
                     break
@@ -100,7 +115,6 @@ class MonoCalibrator(object):
                 break
             # Step 1 -- capture ID card features
             elif cv.waitKey(1) & 0xff == ord('i'):
-                # turns on autofocus
                 cam.set(cv.CAP_PROP_AUTOFOCUS, 1)
                 print('autofocus engaged.')
                 self.detect_card_example(frame, depth_estimator, card_detector)
@@ -144,6 +158,8 @@ class MonoCalibrator(object):
 
                 # reidentify credit card and get its dimensions
                 valid, h, w = self.reidentify_card(undist, card_detector)
+                # assign width to card_w_pix
+                self.card_w_pix = w
                 if valid == True:
                     # estimate focal length
                     output = self.detect(self.face, self.detector, undist)
@@ -223,6 +239,14 @@ class MonoCalibrator(object):
             w_iris_pix = face.get_iris_diameter()
             # transforms to real width and updates face mesh
             face.update_iris_width(self.w_card, self.card_w_pix)
+            # logic to prevent abnormal iris diameters
+            # 12.5 mm is a threshold for diagnosing megalocornea
+            # 11.0 mm is a threshold for diagnosing microcornea
+            # assume measurement error and default to mean iris width
+            # if face.w_iris > 12.5:
+            #     face.w_iris = 11.7
+            # if face.w_iris < 11.0:
+            #     face.w_iris = 11.7
             # focal length when iris diameter assumed to be 11.7mm
             output.append(self.get_f_length(w_iris_pix, 11.7))
             output.append(face.w_iris)
@@ -363,13 +387,15 @@ class MonoCalibrator(object):
 
 if __name__ == '__main__':
     ############################# do not remove
-    # necessary to initialize gui before card detector is initialized
+    # necessary to initialize gui by using imshow before card detector is initialized
     impath = './calibration/mono_imgs/1.png'
     img = cv.imread(impath)
     cv.imshow('img', img)
     cv.waitKey(1)
     cv.destroyWindow('img')
     ############################# end do not remove
+    # monocalibrator potentially accepts multiple cameras
+    # this is only to be compatible wth stereo_depth_calibrated script
     cameras = {'camL':0}
     # card points at 20 inches
     CARD20 = np.array([315, 240, 402, 240])
@@ -390,6 +416,6 @@ if __name__ == '__main__':
     # calibrator, where distance to camera (in.) is transformed (mm)
     monocal = MonoCalibrator(cameras, face, 12*25.4, CARD12, (6,9))
     # updated face object with focal length and iris width (mm)
-    face = monocal.stream(card_detector, estimator, from_saved=False)
+    face = monocal.stream(card_detector, estimator, from_saved=True)
     print('Focal Lengths:')
     print(f'f_card: {monocal.f_card}\tf_iris: {monocal.f_iris}\tf_monocal: {monocal.f_monocal}')
